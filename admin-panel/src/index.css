@@ -1,0 +1,40 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+@layer components {
+  .btn-admin {
+    @apply px-4 py-2 rounded-lg font-semibold text-xs
+           bg-admin text-white shadow-sm
+           hover:bg-admin-700 active:scale-[0.98]
+           transition-all disabled:opacity-50 disabled:cursor-not-allowed;
+  }
+
+  .btn-outline {
+    @apply px-3.5 py-1.5 rounded-lg font-medium text-xs
+           border border-slate-200 text-slate-700 bg-white
+           hover:bg-slate-50 active:scale-[0.98]
+           transition-all;
+  }
+
+  .input-field {
+    @apply w-full px-3 py-2 rounded-lg border border-slate-200
+           bg-white text-slate-900 text-xs
+           placeholder:text-slate-400
+           focus:outline-none focus:ring-2 focus:ring-admin/40 focus:border-admin
+           transition-all;
+  }
+
+  .th-cell {
+    @apply px-4 py-3 text-left text-[11px] font-bold text-slate-400
+           uppercase tracking-wider;
+  }
+
+  .td-cell {
+    @apply px-4 py-3.5 text-xs text-slate-700 whitespace-nowrap;
+  }
+}
