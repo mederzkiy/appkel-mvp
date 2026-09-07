@@ -18,8 +18,16 @@ export default function AdminProtectedRoute() {
   const [authorized, setAuthorized] = useState(false);
 
   useEffect(() => {
-    if (loading || !session) return;
+    // Если еще идет первичная загрузка статуса - ждем
+    if (loading) return;
 
+    // Если пользователь не авторизован - выключаем проверку (ниже нас перекинет на /login)
+    if (!session) {
+      setChecking(false);
+      return;
+    }
+
+    // Если сессия есть - идем стучаться на бэкенд
     apiGet('/api/admin/metrics')
       .then(() => {
         setAuthorized(true);
