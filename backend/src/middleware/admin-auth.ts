@@ -17,31 +17,37 @@ export async function requireSuperAdminAuth(
       return;
     }
 
-    const token = authHeader.slice(7);
+    // Надежно отрезаем слово Bearer и убираем любые случайные пробелы по краям
+    const token = authHeader.replace('Bearer ', '').trim();
 
     const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
 
+    // Если токен не прошел проверку - отдаем ТОЧНУЮ причину во фронтенд
     if (userError || !user) {
-      res.status(401).json({ error: 'Недействительный токен' });
+      console.error('[Auth Error]:', userError);
+      res.status(401).json({ 
+        error: 'Недействительный токен', 
+        details: userError?.message || 'Неизвестная ошибка Supabase'
+      });
       return;
     }
 
     // Проверяем роль 'super_admin' в profiles
-    const { data: profile } = await supabaseAdmin
+    const { data: profile, error: profileError } = await supabaseAdmin
       .from('profiles')
       .select('role')
       .eq('id', user.id)
       .single();
 
-    if (profile?.role !== 'super_admin') {
+    if (profileError || profile?.role !== 'super_admin') {
       res.status(403).json({ error: 'Доступ запрещён: требуются права суперадминистратора' });
       return;
     }
 
     req.user = user;
     next();
-  } catch (err) {
+  } catch (err: any) {
     console.error('[Admin Auth Middleware Error]:', err);
-    res.status(500).json({ error: 'Ошибка проверки прав суперадминистратора' });
+    res.status(500).json({ error: 'Ошибка сервера', details: err.message });
   }
 }
