@@ -10,9 +10,11 @@ router.get('/health', (_req, res) => {
   res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
-// Модульные маршруты
-router.use('/', buyerRouter);
-router.use('/seller', sellerRouter);
+// Модульные маршруты: СНАЧАЛА проверяем админку и продавцов
 router.use('/admin', adminRouter);
+router.use('/seller', sellerRouter);
+
+// И только потом пропускаем остальные запросы в buyerRouter
+router.use('/', buyerRouter);
 
 export const apiRouter = router;
