@@ -6,6 +6,9 @@
 
 const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined;
 
+// Жестко прописываем URL бэкенда для надежной работы на Vercel
+const API_BASE_URL = 'https://appkel-backend.onrender.com';
+
 export interface StoreInfo {
   id: string;
   name: string;
@@ -54,7 +57,8 @@ async function request<T>(endpoint: string, storeId: string, options: RequestIni
     ...(options.headers as Record<string, string>),
   };
 
-  const response = await fetch(endpoint, {
+  // Склеиваем домен бэкенда с путем запроса
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
     ...options,
     headers,
   });
