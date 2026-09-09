@@ -1,115 +1,132 @@
-import { Bot, InlineKeyboard } from 'grammy';
+import { Bot, InlineKeyboard, Keyboard } from 'grammy';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { config } from '../config/env.js';
 
 class BotManager {
-  private bots: Map<string, Bot> = new Map();
+  private mainBot: Bot | null = null;
 
   /**
-   * Инициализация ботов всех активных магазинов при старте сервера
+   * Инициализация Единого бота при старте сервера
    */
   async init(): Promise<void> {
-    console.log('[BotManager] Загрузка активных ботов...');
-
-    const { data: stores, error } = await supabaseAdmin
-      .from('stores')
-      .select('id, name, telegram_bot_token, status')
-      .eq('status', 'active')
-      .not('telegram_bot_token', 'is', null);
-
-    if (error) {
-      console.error('[BotManager] Ошибка загрузки магазинов:', error);
+    console.log('[BotManager] Запуск Единого Telegram-бота...');
+    
+    // В MVP мы можем брать токен главного бота прямо из .env
+    const mainBotToken = process.env.TELEGRAM_BOT_TOKEN; 
+    
+    if (!mainBotToken) {
+      console.error('[BotManager] Ошибка: TELEGRAM_BOT_TOKEN не найден в .env');
       return;
     }
 
-    for (const store of stores || []) {
-      if (store.telegram_bot_token) {
-        await this.startBot(store.id, store.telegram_bot_token, store.name);
-      }
-    }
-
-    console.log(`[BotManager] Успешно запущено ботов: ${this.bots.size}`);
+    await this.startMainBot(mainBotToken);
   }
 
   /**
-   * Запуск или перезапуск отдельного бота
+   * Запуск главного бота маркетплейса
    */
-  async startBot(storeId: string, token: string, storeName?: string): Promise<boolean> {
+  private async startMainBot(token: string): Promise<void> {
     try {
-      // Если бот уже был запущен, сначала останавливаем
-      if (this.bots.has(storeId)) {
-        await this.stopBot(storeId);
-      }
+      this.mainBot = new Bot(token);
+      const bot = this.mainBot;
 
-      const bot = new Bot(token);
-
-      // Команда /start для покупателя
+      // 1. Обработка команды /start (с поддержкой перехода по QR коду)
       bot.command('start', async (ctx) => {
-        const webAppUrl = `${config.tma.baseUrl}?store_id=${storeId}`;
+        // Если клиент пришел по ссылке магазина (deep link), параметр будет в ctx.match
+        const deepLinkPayload = ctx.match; 
+        
+        // Создаем клавиатуру для запроса данных
+        const requestKeyboard = new Keyboard()
+          .requestContact('📱 Поделиться номером').row()
+          .requestLocation('📍 Поделиться локацией')
+          .resized()
+          .oneTime();
 
-        const keyboard = new InlineKeyboard().webApp(
-          `🛍 Открыть ${storeName || 'магазин'}`,
+        await ctx.reply(
+          `Здравствуйте, ${ctx.from?.first_name || 'дорогой клиент'}! 👋\n\n` +
+          `Добро пожаловать в маркетплейс Appkel.\n` +
+          `Чтобы мы могли показать ближайшие магазины и рассчитать стоимость доставки, пожалуйста, поделитесь номером телефона и вашей локацией (используйте кнопки ниже).`,
+          { reply_markup: requestKeyboard }
+        );
+        
+        // Если был передан ID магазина в ссылке, можно сохранить его в сессию (в будущем)
+        if (deepLinkPayload) {
+          console.log(`[BotManager] Пользователь пришел в магазин: ${deepLinkPayload}`);
+        }
+      });
+
+      // 2. Обработка получения контакта (Телефона)
+      bot.on('message:contact', async (ctx) => {
+        const contact = ctx.message.contact;
+        
+        // Защита: проверяем, что пользователь отправил свой номер, а не чужой
+        if (contact.user_id !== ctx.from.id) return; 
+
+        // Записываем данные в таблицу buyers
+        await supabaseAdmin.from('buyers').upsert({
+          telegram_id: ctx.from.id.toString(),
+          phone: contact.phone_number,
+          first_name: ctx.from.first_name,
+          username: ctx.from.username
+        });
+
+        await ctx.reply('✅ Номер успешно сохранен! Теперь отправьте вашу локацию.');
+      });
+
+      // 3. Обработка получения локации (Геопозиции)
+      bot.on('message:location', async (ctx) => {
+        const location = ctx.message.location;
+
+        // Обновляем данные покупателя координатами
+        await supabaseAdmin.from('buyers').upsert({
+          telegram_id: ctx.from.id.toString(),
+          latitude: location.latitude,
+          longitude: location.longitude,
+          first_name: ctx.from.first_name, // на случай если локацию скинули первой
+          username: ctx.from.username
+        });
+
+        // Прячем системную клавиатуру
+        await ctx.reply('✅ Локация сохранена! Теперь мы подберем лучшие предложения.', {
+          reply_markup: { remove_keyboard: true }
+        });
+
+        // Показываем кнопку входа в Mini App
+        // Передаем глобальную ссылку (Mini App сам запросит магазины по радиусу)
+        const webAppUrl = config.tma.baseUrl; 
+        const inlineKeyboard = new InlineKeyboard().webApp(
+          `🛍 Открыть маркетплейс`,
           webAppUrl
         );
 
-        await ctx.reply(
-          `Здравствуйте, ${ctx.from?.first_name || 'дорогой клиент'}!\n\n` +
-          `Добро пожаловать в онлайн-витрину магазина "${storeName || 'Appkel'}". ` +
-          `Нажмите кнопку ниже, чтобы выбрать товары и оформить заказ:`,
-          { reply_markup: keyboard }
-        );
+        await ctx.reply('Нажмите кнопку ниже, чтобы войти в приложение:', {
+          reply_markup: inlineKeyboard
+        });
       });
 
-      // Ловим ошибки, чтобы падение одного бота не роняло весь сервер
+      // Ловим ошибки
       bot.catch((err) => {
-        console.error(`[BotManager] Ошибка в боте магазина ${storeId}:`, err);
+        console.error(`[BotManager] Ошибка в главном боте:`, err);
       });
 
-      // Запуск long polling в фоне
+      // Запуск
       bot.start({
         onStart: (info) => {
-          console.log(`[BotManager] Бот @${info.username} (Store: ${storeId}) активен`);
+          console.log(`[BotManager] Главный бот @${info.username} успешно запущен`);
         },
       });
 
-      this.bots.set(storeId, bot);
-      return true;
     } catch (err) {
-      console.error(`[BotManager] Не удалось запустить бота для магазина ${storeId}:`, err);
-      return false;
+      console.error(`[BotManager] Не удалось запустить главного бота:`, err);
     }
   }
 
-  /**
-   * Остановка бота (при приостановке подписки магазина)
-   */
-  async stopBot(storeId: string): Promise<void> {
-    const bot = this.bots.get(storeId);
-    if (bot) {
-      try {
-        await bot.stop();
-        this.bots.delete(storeId);
-        console.log(`[BotManager] Бот магазина ${storeId} остановлен`);
-      } catch (err) {
-        console.error(`[BotManager] Ошибка при остановке бота ${storeId}:`, err);
-      }
-    }
-  }
+  // === Методы для связи с магазинами оставляем (они понадобятся для уведомлений) ===
 
-  /**
-   * Проверка, запущен ли бот магазина
-   */
-  isBotOnline(storeId: string): boolean {
-    return this.bots.has(storeId);
-  }
-
-  /**
-   * Уведомление продавца о новом заказе в Telegram
-   */
   async notifyStoreOwner(storeId: string, message: string): Promise<void> {
-    const bot = this.bots.get(storeId);
-    if (!bot) return;
-
+    if (!this.mainBot) return;
+    
+    // Получаем Telegram ID владельца магазина
     const { data: store } = await supabaseAdmin
       .from('stores')
       .select('owner_chat_id')
@@ -118,53 +135,20 @@ class BotManager {
 
     if (store?.owner_chat_id) {
       try {
-        await bot.api.sendMessage(store.owner_chat_id, message, { parse_mode: 'HTML' });
+        await this.mainBot.api.sendMessage(store.owner_chat_id, message, { parse_mode: 'HTML' });
       } catch (err) {
-        console.error(`[BotManager] Ошибка отправки уведомления владельцу магазина ${storeId}:`, err);
+        console.error(`[BotManager] Ошибка уведомления магазина ${storeId}:`, err);
       }
     }
   }
 
-  /**
-   * Уведомление покупателя об изменении статуса заказа
-   */
-  async notifyCustomer(storeId: string, telegramUserId: number, message: string): Promise<void> {
-    const bot = this.bots.get(storeId);
-    if (!bot) return;
-
+  async notifyCustomer(telegramUserId: number, message: string): Promise<void> {
+    if (!this.mainBot) return;
     try {
-      await bot.api.sendMessage(telegramUserId, message, { parse_mode: 'HTML' });
+      await this.mainBot.api.sendMessage(telegramUserId, message, { parse_mode: 'HTML' });
     } catch (err) {
       console.error(`[BotManager] Ошибка уведомления покупателя ${telegramUserId}:`, err);
     }
-  }
-
-  /**
-   * Массовая рассылка (Push-кампания) по базе покупателей магазина
-   */
-  async broadcast(
-    storeId: string,
-    customerTelegramIds: number[],
-    messageText: string
-  ): Promise<{ sent: number; failed: number }> {
-    const bot = this.bots.get(storeId);
-    if (!bot) throw new Error('Бот магазина не запущен');
-
-    let sent = 0;
-    let failed = 0;
-
-    for (const tgId of customerTelegramIds) {
-      try {
-        await bot.api.sendMessage(tgId, messageText);
-        sent++;
-      } catch {
-        failed++;
-      }
-      // Rate limiting: пауза 50мс между сообщениями, чтобы не ловить 429 от Telegram
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
-
-    return { sent, failed };
   }
 }
 
