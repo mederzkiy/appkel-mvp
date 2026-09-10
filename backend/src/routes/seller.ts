@@ -33,6 +33,7 @@ router.patch('/orders/:orderId/status', updateOrderStatus);
 // Каталог
 router.get('/catalog', getSellerCatalog);
 router.post('/catalog/toggle', toggleSellerCatalogItem);
+router.post('/catalog/custom', createCustomProduct);
 
 // Рассылка
 router.post('/push-campaign', sendPushCampaign);

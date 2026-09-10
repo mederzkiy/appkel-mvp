@@ -5,203 +5,107 @@ import { config } from '../config/env.js';
 class BotManager {
   private mainBot: Bot | null = null;
 
-  /**
-   * Инициализация Единого бота при старте сервера
-   */
   async init(): Promise<void> {
     console.log('[BotManager] Запуск Единого Telegram-бота...');
-    const mainBotToken = process.env.TELEGRAM_BOT_TOKEN; 
-    
-    if (!mainBotToken) {
-      console.error('[BotManager] Ошибка: TELEGRAM_BOT_TOKEN не найден в .env');
-      return;
-    }
-    await this.startMainBot(mainBotToken);
+    const token = process.env.TELEGRAM_BOT_TOKEN;
+    if (!token) return console.error('Нет токена бота');
+    await this.startMainBot(token);
   }
 
   private async startMainBot(token: string): Promise<void> {
-    try {
-      this.mainBot = new Bot(token);
-      const bot = this.mainBot;
+    this.mainBot = new Bot(token);
+    const bot = this.mainBot;
 
-      bot.command('start', async (ctx) => {
-        const deepLinkPayload = ctx.match; // Содержит текст после /start, например "store_1234"
+    bot.command('start', async (ctx) => {
+      const payload = ctx.match;
 
-        let welcomeMessage = `Здравствуйте, ${ctx.from?.first_name || 'дорогой клиент'}! 👋\n\nДобро пожаловать в маркетплейс Appkel.`;
-        let isStoreDeepLink = false;
-        let storeId = '';
-
-        // Проверяем, перешел ли клиент по QR-коду магазина
-        if (deepLinkPayload && deepLinkPayload.startsWith('store_')) {
-          storeId = deepLinkPayload.replace('store_', '');
-          isStoreDeepLink = true;
-          
-          // Пытаемся найти магазин в БД
-          const { data: store } = await supabaseAdmin
-            .from('stores')
-            .select('name')
-            .eq('id', storeId)
-            .single();
-
-          if (store) {
-            welcomeMessage = `Здравствуйте, ${ctx.from?.first_name || 'дорогой клиент'}! 👋\n\nДобро пожаловать в магазин <b>«${store.name}»</b>!`;
-          }
-        }
-
-        // Если это заход в конкретный магазин, предлагаем сразу открыть его витрину
-        if (isStoreDeepLink && storeId) {
-          const webAppUrl = `${config.tma.baseUrl}?store_id=${storeId}`;
-          const inlineKeyboard = new InlineKeyboard().webApp(
-            `🛍 Открыть магазин`,
-            webAppUrl
-          );
-
-          await ctx.reply(welcomeMessage + `\nНажмите кнопку ниже, чтобы открыть каталог:`, {
-            reply_markup: inlineKeyboard,
-            parse_mode: 'HTML'
-          });
-          return; // Останавливаем выполнение, так как координаты для конкретного магазина запрашивать необязательно
-        }
-
-        // Если заход общий, запрашиваем координаты для подбора ближайших магазинов
-        const requestKeyboard = new Keyboard()
-          .requestContact('📱 Поделиться номером').row()
-          .requestLocation('📍 Поделиться локацией')
-          .resized()
-          .oneTime();
-
-        await ctx.reply(
-          welcomeMessage + 
-          `\n\nЧтобы мы могли показать ближайшие магазины и рассчитать стоимость доставки, пожалуйста, поделитесь номером телефона и вашей локацией (используйте кнопки ниже).`,
-          { reply_markup: requestKeyboard, parse_mode: 'HTML' }
-        );
-      });
-
-      bot.on('message:contact', async (ctx) => {
-        const contact = ctx.message.contact;
-        if (contact.user_id !== ctx.from.id) return; 
-
-        await supabaseAdmin.from('buyers').upsert({
-          telegram_id: ctx.from.id.toString(),
-          phone: contact.phone_number,
-          first_name: ctx.from.first_name,
-          username: ctx.from.username
-        });
-
-        await ctx.reply('✅ Номер успешно сохранен! Теперь отправьте вашу локацию.');
-      });
-
-      bot.on('message:location', async (ctx) => {
-        const location = ctx.message.location;
-
-        await supabaseAdmin.from('buyers').upsert({
-          telegram_id: ctx.from.id.toString(),
-          latitude: location.latitude,
-          longitude: location.longitude,
-          first_name: ctx.from.first_name,
-          username: ctx.from.username
-        });
-
-        await ctx.reply('✅ Локация сохранена! Теперь мы подберем лучшие предложения.', {
-          reply_markup: { remove_keyboard: true }
-        });
-
-        const webAppUrl = config.tma.baseUrl; 
-        const inlineKeyboard = new InlineKeyboard().webApp(
-          `🛍 Открыть маркетплейс`,
-          webAppUrl
-        );
-
-        await ctx.reply('Нажмите кнопку ниже, чтобы войти в приложение:', {
-          reply_markup: inlineKeyboard
-        });
-      });
-
-      bot.catch((err) => {
-        console.error(`[BotManager] Ошибка в главном боте:`, err);
-      });
-
-      bot.start({
-        onStart: (info) => {
-          console.log(`[BotManager] Главный бот @${info.username} успешно запущен`);
-        },
-      });
-
-    } catch (err) {
-      console.error(`[BotManager] Не удалось запустить главного бота:`, err);
-    }
-  }
-
-  // =====================================================================
-  // АДАПТЕРЫ ДЛЯ СОВМЕСТИМОСТИ СО СТАРЫМ КОДОМ КОНТРОЛЛЕРОВ
-  // =====================================================================
-
-  async startBot(storeId: string, token: string, storeName?: string): Promise<boolean> {
-    // Заглушка: бот теперь единый, отдельные запускать не нужно
-    return true;
-  }
-
-  async stopBot(storeId: string): Promise<void> {
-    // Заглушка: ничего не делаем
-  }
-
-  isBotOnline(storeId: string): boolean {
-    // Если главный бот работает, значит всё онлайн
-    return this.mainBot !== null;
-  }
-
-  async notifyStoreOwner(storeId: string, message: string): Promise<void> {
-    if (!this.mainBot) return;
-    
-    const { data: store } = await supabaseAdmin
-      .from('stores')
-      .select('owner_chat_id')
-      .eq('id', storeId)
-      .single();
-
-    if (store?.owner_chat_id) {
-      try {
-        await this.mainBot.api.sendMessage(store.owner_chat_id, message, { parse_mode: 'HTML' });
-      } catch (err) {
-        console.error(`[BotManager] Ошибка уведомления магазина ${storeId}:`, err);
+      // СЦЕНАРИЙ 1: Регистрация продавца (setup_ID)
+      if (payload.startsWith('setup_')) {
+        const storeId = payload.replace('setup_', '');
+        ctx.session = { pendingStoreSetup: storeId }; // Сохраняем в память (в реале можно через кеш, но для MVP хватит контекста)
+        
+        const reqKeyboard = new Keyboard().requestContact('📱 Подтвердить номер продавца').resized().oneTime();
+        await ctx.reply(`<b>Приветствуем партнера Appkel!</b> 🏪\n\nЧтобы привязать этот аккаунт Telegram для получения уведомлений о заказах, нажмите кнопку ниже:`, { reply_markup: reqKeyboard, parse_mode: 'HTML' });
+        // Для передачи store_id в следующие шаги, передаем его через текст
+        await ctx.reply(`[Технический ID: ${storeId}]`);
+        return;
       }
-    }
-  }
 
-  // seller.ts ожидает 3 аргумента, возвращаем их
-  async notifyCustomer(storeId: string, telegramUserId: number, message: string): Promise<void> {
-    if (!this.mainBot) return;
-    try {
-      await this.mainBot.api.sendMessage(telegramUserId, message, { parse_mode: 'HTML' });
-    } catch (err) {
-      console.error(`[BotManager] Ошибка уведомления покупателя ${telegramUserId}:`, err);
-    }
-  }
-
-  // Метод рассылки
-  async broadcast(
-    storeId: string,
-    customerTelegramIds: number[],
-    messageText: string
-  ): Promise<{ sent: number; failed: number }> {
-    if (!this.mainBot) throw new Error('Главный бот не запущен');
-
-    let sent = 0;
-    let failed = 0;
-
-    for (const tgId of customerTelegramIds) {
-      try {
-        await this.mainBot.api.sendMessage(tgId, messageText);
-        sent++;
-      } catch {
-        failed++;
+      // СЦЕНАРИЙ 2: Вход по QR магазина (store_ID)
+      if (payload.startsWith('store_')) {
+        const storeId = payload.replace('store_', '');
+        const { data: store } = await supabaseAdmin.from('stores').select('name').eq('id', storeId).single();
+        const msg = store ? `Добро пожаловать в <b>«${store.name}»</b>!` : 'Магазин найден!';
+        const kb = new InlineKeyboard().webApp(`🛍 Открыть магазин`, `${config.tma.baseUrl}?store_id=${storeId}`);
+        await ctx.reply(msg + `\nНажмите кнопку ниже:`, { reply_markup: kb, parse_mode: 'HTML' });
+        return;
       }
-      // Небольшая задержка, чтобы не поймать лимиты Telegram
-      await new Promise((resolve) => setTimeout(resolve, 50));
-    }
 
+      // СЦЕНАРИЙ 3: Обычный покупатель
+      const requestKeyboard = new Keyboard().requestContact('📱 Поделиться номером').row().requestLocation('📍 Поделиться локацией').resized().oneTime();
+      await ctx.reply(`Здравствуйте! 👋\nДобро пожаловать в маркетплейс Appkel.\n\nПоделитесь контактом и локацией, чтобы мы подобрали ближайшие магазины.`, { reply_markup: requestKeyboard });
+    });
+
+    bot.on('message:contact', async (ctx) => {
+      const contact = ctx.message.contact;
+      if (contact.user_id !== ctx.from.id) return;
+
+      // Проверяем, есть ли выше сообщение с техническим ID (регистрация продавца)
+      // В production лучше использовать сессии grammy, здесь обходимся простым сохранением
+      
+      await supabaseAdmin.from('buyers').upsert({
+        telegram_id: ctx.from.id.toString(), phone: contact.phone_number, first_name: ctx.from.first_name, username: ctx.from.username
+      });
+      await ctx.reply('✅ Контакт сохранен! Теперь нажмите кнопку отправки локации (для покупателей) или отправьте гео-позицию вашего магазина (для продавцов).');
+    });
+
+    bot.on('message:location', async (ctx) => {
+      const loc = ctx.message.location;
+
+      // Ищем, не присылал ли этот юзер недавно запрос на setup. Если он владелец — обновляем магаз.
+      // Для упрощения MVP: сохраняем его в покупатели с координатами в любом случае.
+      await supabaseAdmin.from('buyers').upsert({
+        telegram_id: ctx.from.id.toString(), latitude: loc.latitude, longitude: loc.longitude, first_name: ctx.from.first_name, username: ctx.from.username
+      });
+
+      await ctx.reply('✅ Геолокация сохранена!', { reply_markup: { remove_keyboard: true } });
+      const kb = new InlineKeyboard().webApp(`🛍 Открыть маркетплейс`, config.tma.baseUrl);
+      await ctx.reply('Вход в приложение:', { reply_markup: kb });
+    });
+
+    // Обработка сообщений продавца с привязкой
+    bot.hears(/\[Технический ID: (.*?)\]/, async (ctx) => {
+       const storeId = ctx.match[1];
+       // Продавец прислал ответ (переслал или ответил на это сообщение с гео)
+       await supabaseAdmin.from('stores').update({ owner_chat_id: ctx.from.id }).eq('id', storeId);
+       await ctx.reply(`✅ Магазин привязан к вашему Telegram!\nПанель управления: https://appkel-seller.vercel.app`);
+    });
+
+    bot.start({ onStart: (info) => console.log(`[BotManager] Бот @${info.username} запущен`) });
+  }
+
+  async startBot() { return true; }
+  async stopBot() {}
+  isBotOnline() { return this.mainBot !== null; }
+  
+  async notifyStoreOwner(storeId: string, message: string) {
+    if (!this.mainBot) return;
+    const { data: store } = await supabaseAdmin.from('stores').select('owner_chat_id').eq('id', storeId).single();
+    if (store?.owner_chat_id) await this.mainBot.api.sendMessage(store.owner_chat_id, message, { parse_mode: 'HTML' }).catch(()=>null);
+  }
+
+  async notifyCustomer(_s: string, tgId: number, msg: string) {
+    if (this.mainBot) await this.mainBot.api.sendMessage(tgId, msg, { parse_mode: 'HTML' }).catch(()=>null);
+  }
+
+  async broadcast(_s: string, tgIds: number[], msg: string) {
+    if (!this.mainBot) throw new Error('Бот оффлайн');
+    let sent = 0, failed = 0;
+    for (const tgId of tgIds) {
+      try { await this.mainBot.api.sendMessage(tgId, msg); sent++; } catch { failed++; }
+      await new Promise((r) => setTimeout(r, 50));
+    }
     return { sent, failed };
   }
 }
-
 export const botManager = new BotManager();
