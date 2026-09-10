@@ -12,6 +12,9 @@ export default function AdminProtectedRoute() {
       await checkAuth();
     };
     init();
+    
+    // Явный возврат undefined для защиты от минификатора Vite
+    return undefined;
   }, [checkAuth]);
 
   if (loading) {
