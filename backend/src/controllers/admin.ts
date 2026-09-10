@@ -117,3 +117,38 @@ export async function createCategory(req: AdminRequest, res: Response): Promise<
     res.status(201).json({ category });
   } catch (err) { res.status(500).json({ error: 'Ошибка создания категории' }); }
 }
+
+// ======================= НОВЫЕ ФУНКЦИИ =======================
+
+export async function getUsersList(req: AdminRequest, res: Response): Promise<void> {
+  try {
+    const { data: { users }, error } = await supabaseAdmin.auth.admin.listUsers();
+    if (error) return void res.status(500).json({ error: error.message });
+    res.json({ users: (users || []).map(u => ({ id: u.id, email: u.email })) });
+  } catch (err) { res.status(500).json({ error: 'Ошибка загрузки пользователей' }); }
+}
+
+export async function createStore(req: AdminRequest, res: Response): Promise<void> {
+  try {
+    const { name, owner_id } = req.body;
+    if (!name) return void res.status(400).json({ error: 'Название обязательно' });
+
+    const { data: store, error } = await supabaseAdmin.from('stores').insert({
+      name: name.trim(),
+      owner_id: owner_id || null,
+      status: 'active'
+    }).select('*').single();
+
+    if (error) return void res.status(400).json({ error: error.message });
+    res.status(201).json({ store });
+  } catch (err) { res.status(500).json({ error: 'Ошибка создания магазина' }); }
+}
+
+export async function deleteStore(req: AdminRequest, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { error } = await supabaseAdmin.from('stores').delete().eq('id', id);
+    if (error) return void res.status(400).json({ error: error.message });
+    res.json({ success: true });
+  } catch (err) { res.status(500).json({ error: 'Ошибка удаления магазина' }); }
+}
