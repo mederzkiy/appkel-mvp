@@ -7,7 +7,11 @@ export default function AdminProtectedRoute() {
   const { user, loading, checkAuth } = useAuthStore();
 
   useEffect(() => {
-    checkAuth();
+    // Железобетонная обертка, чтобы хук никогда не вернул Promise
+    const init = async () => {
+      await checkAuth();
+    };
+    init();
   }, [checkAuth]);
 
   if (loading) {
@@ -19,7 +23,6 @@ export default function AdminProtectedRoute() {
   }
 
   // Админка требует ТОЛЬКО логин по email и паролю.
-  // Никаких проверок Telegram WebApp!
   if (!user) {
     return <Navigate to="/login" replace />;
   }

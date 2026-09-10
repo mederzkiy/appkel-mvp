@@ -1,18 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import {
-  Loader2,
-  Store,
-  Wifi,
-  X,
-  Save,
-  Calendar,
-  QrCode,
-  Download,
-  Printer,
-  MapPin,
-  Plus,
-  Trash2
-} from 'lucide-react';
+import { Loader2, Store, Wifi, X, Save, Calendar, QrCode, Download, Printer, MapPin, Plus, Trash2 } from 'lucide-react';
 import { apiGet, apiPatch, apiPost } from '../api/client';
 import { useUIStore } from '../store/ui';
 
@@ -51,7 +38,11 @@ export default function StoresPage() {
   };
 
   useEffect(() => {
-    fetchStores();
+    // Железобетонный вызов
+    const init = async () => {
+      await fetchStores();
+    };
+    init();
   }, []);
 
   const handleDelete = async (id: string, name: string) => {
@@ -212,7 +203,6 @@ export default function StoresPage() {
   );
 }
 
-// Модалка создания магазина
 function CreateStoreModal({ onClose, onSaved }: { onClose: () => void; onSaved: () => void; }) {
   const [name, setName] = useState('');
   const [ownerId, setOwnerId] = useState('');
@@ -221,9 +211,14 @@ function CreateStoreModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   const addToast = useUIStore((s: any) => s.addToast);
 
   useEffect(() => {
-    apiGet<{users: {id: string, email: string}[]}>('/api/admin/users')
-      .then(res => setUsers(res.users || []))
-      .catch(() => {});
+    // Железобетонный вызов
+    const loadUsers = async () => {
+      try {
+        const res = await apiGet<{users: {id: string, email: string}[]}>('/api/admin/users');
+        setUsers(res.users || []);
+      } catch (e) {}
+    };
+    loadUsers();
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
@@ -268,7 +263,6 @@ function CreateStoreModal({ onClose, onSaved }: { onClose: () => void; onSaved: 
   );
 }
 
-// Модалка редактирования
 function EditStoreModal({ store, onClose, onSaved }: { store: StoreRow; onClose: () => void; onSaved: () => void; }) {
   const [status, setStatus] = useState(store.status);
   const [latitude, setLatitude] = useState(store.latitude?.toString() || '');

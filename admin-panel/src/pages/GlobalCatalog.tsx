@@ -41,7 +41,13 @@ export default function GlobalCatalogPage() {
     }
   };
 
-  useEffect(() => { fetchData(); }, []);
+  useEffect(() => {
+    // Железобетонный вызов
+    const init = async () => {
+      await fetchData();
+    };
+    init();
+  }, []);
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -53,7 +59,6 @@ export default function GlobalCatalogPage() {
     setSaving(true);
     try {
       if (editItem.id) {
-        // Редактирование существующего
         await apiPatch(`/api/admin/global-products/${editItem.id}`, {
           name: editItem.name,
           category_id: editItem.category_id,
@@ -62,7 +67,6 @@ export default function GlobalCatalogPage() {
         });
         addToast('Товар успешно обновлен', 'success');
       } else {
-        // Создание нового
         await apiPost('/api/admin/global-products', editItem);
         addToast('Новый товар создан', 'success');
       }
@@ -134,7 +138,6 @@ export default function GlobalCatalogPage() {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
-              {/* Photo Preview */}
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
                   {editItem.photo_url ? (
