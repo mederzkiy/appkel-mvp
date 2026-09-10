@@ -83,11 +83,16 @@ class BotManager {
     });
 
     bot.hears(/\[Технический ID: (.*?)\]/, async (ctx) => {
-       if (!ctx.from) return;
-       const storeId = ctx.match[1];
-       await supabaseAdmin.from('stores').update({ owner_chat_id: ctx.from.id }).eq('id', storeId);
-       await ctx.reply(`✅ Магазин привязан к вашему Telegram!\nПанель управления: https://appkel-seller.vercel.app`);
-    });
+      if (!ctx.from) return;
+      const storeId = ctx.match[1];
+      await supabaseAdmin.from('stores').update({ owner_chat_id: ctx.from.id }).eq('id', storeId);
+      
+      // КРИТИЧЕСКОЕ ИСПРАВЛЕНИЕ: Отправляем панель продавца как WebApp кнопку, чтобы работала TMA-авторизация
+      const sellerUrl = 'https://appkel-seller.vercel.app'; // Убедись, что тут твой реальный URL Vercel для Seller Panel
+      const kb = new InlineKeyboard().webApp(`⚙️ Управление магазином`, sellerUrl);
+      
+      await ctx.reply(`✅ Магазин успешно привязан к вашему аккаунту Telegram!\nТеперь вы будете получать сюда чеки заказов.`, { reply_markup: kb });
+   });
 
     bot.start({ onStart: (info) => console.log(`[BotManager] Бот @${info.username} запущен`) });
   }

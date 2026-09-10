@@ -81,7 +81,6 @@ export default function OrdersPage() {
 
   const [broadcastText, setBroadcastText] = useState('');
   const [sendingBroadcast, setSendingBroadcast] = useState(false);
-  const [showBroadcastBox, setShowBroadcastBox] = useState(false);
 
   const addToast = useUIStore((s: any) => s.addToast);
 
@@ -128,7 +127,6 @@ export default function OrdersPage() {
       await apiPost('/api/seller/push-campaign', { message: broadcastText.trim() });
       addToast('Рассылка успешно запущена!', 'success');
       setBroadcastText('');
-      setShowBroadcastBox(false);
     } catch (err: any) {
       addToast(err.message || 'Ошибка отправки рассылки', 'error');
     } finally {
@@ -137,28 +135,19 @@ export default function OrdersPage() {
   };
 
   return (
-    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
+    <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6 pb-20">
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-black text-slate-900">Дашборд магазина</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Управление заказами, показателями и маркетингом</p>
+          <p className="text-xs text-slate-500 mt-0.5">Управление заказами и показателями</p>
         </div>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setShowBroadcastBox(!showBroadcastBox)}
-            className="px-3.5 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
-          >
-            <Send className="w-3.5 h-3.5" />
-            <span>Рассылка</span>
-          </button>
-          <button
-            onClick={() => fetchData(true)}
-            disabled={refreshing}
-            className="p-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors"
-          >
-            <RefreshCw className={`w-4 h-4 ${refreshing ? 'animate-spin' : ''}`} />
-          </button>
-        </div>
+        <button
+          onClick={() => fetchData(true)}
+          disabled={refreshing}
+          className="p-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl transition-colors active:scale-95"
+        >
+          <RefreshCw className={`w-5 h-5 ${refreshing ? 'animate-spin' : ''}`} />
+        </button>
       </div>
 
       <div className="bg-slate-900 text-white rounded-3xl p-5 shadow-sm space-y-4">
@@ -204,37 +193,6 @@ export default function OrdersPage() {
         </div>
       </div>
 
-      {showBroadcastBox && (
-        <div className="bg-blue-50/70 border border-blue-200 rounded-3xl p-4 space-y-3 transition-all">
-          <div className="flex justify-between items-center text-xs">
-            <span className="font-bold text-blue-900 flex items-center gap-1.5">
-              <Send className="w-3.5 h-3.5" /> Создание Push-рассылки покупателям
-            </span>
-            <span className={broadcastText.length > 150 ? 'text-red-500 font-bold' : 'text-slate-500 font-medium'}>
-              {broadcastText.length} / 150 знаков
-            </span>
-          </div>
-          <textarea
-            value={broadcastText}
-            onChange={(e: any) => setBroadcastText(e.target.value)}
-            maxLength={150}
-            rows={2}
-            placeholder="Скидка 15% на всю категорию напитков до конца дня! Ждем заказов."
-            className="w-full text-xs p-3 rounded-2xl border border-blue-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <div className="flex justify-between items-center text-[11px] text-blue-700">
-            <span>Лимит: не чаще 1 раза в сутки</span>
-            <button
-              onClick={handleSendBroadcast}
-              disabled={sendingBroadcast || !broadcastText.trim() || broadcastText.length > 150}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl active:scale-95 transition-all disabled:opacity-50"
-            >
-              {sendingBroadcast ? 'Отправка...' : 'Отправить'}
-            </button>
-          </div>
-        </div>
-      )}
-
       <div className="flex gap-2">
         {(['active', 'completed', 'all'] as const).map((f) => (
           <button
@@ -270,6 +228,37 @@ export default function OrdersPage() {
           ))}
         </div>
       )}
+
+      {/* ПОЛНОЦЕННЫЙ БЛОК РАССЫЛКИ В САМОМ НИЗУ */}
+      <div className="mt-10 bg-blue-50/70 border border-blue-200 rounded-3xl p-5 space-y-4">
+        <div className="flex justify-between items-center text-xs">
+          <span className="font-bold text-blue-900 flex items-center gap-2 text-sm">
+            <Send className="w-4 h-4" /> Push-рассылка покупателям
+          </span>
+          <span className={broadcastText.length > 150 ? 'text-red-500 font-bold' : 'text-slate-500 font-medium'}>
+            {broadcastText.length} / 150 знаков
+          </span>
+        </div>
+        <textarea
+          value={broadcastText}
+          onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setBroadcastText(e.target.value)}
+          maxLength={150}
+          rows={3}
+          placeholder="Скидка 15% на всю категорию напитков до конца дня! Ждем ваших заказов."
+          className="w-full text-sm p-4 rounded-2xl border border-blue-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500 shadow-sm"
+        />
+        <div className="flex justify-between items-center text-[11px] text-blue-700">
+          <span className="bg-blue-100 px-2.5 py-1 rounded-lg font-semibold">Лимит: 1 раз в сутки</span>
+          <button
+            onClick={handleSendBroadcast}
+            disabled={sendingBroadcast || !broadcastText.trim() || broadcastText.length > 150}
+            className="px-6 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl active:scale-95 transition-all disabled:opacity-50 flex items-center gap-2 shadow-md"
+          >
+            {sendingBroadcast ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
+            {sendingBroadcast ? 'Отправка...' : 'Отправить всем'}
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -308,41 +297,25 @@ const OrderCard: React.FC<{
 
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 flex items-center gap-1">
               {order.payment_method === 'cash' ? (
-                <>
-                  <Banknote className="w-3 h-3" /> Наличными
-                </>
+                <><Banknote className="w-3 h-3" /> Наличными</>
               ) : (
-                <>
-                  <CreditCard className="w-3 h-3 text-blue-500" /> QR
-                </>
+                <><CreditCard className="w-3 h-3 text-blue-500" /> QR-перевод</>
               )}
             </span>
-
-            {order.payment_confirmed && (
-              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-50 border border-emerald-200 text-emerald-700">
-                💳 Подтверждён
-              </span>
-            )}
           </div>
 
           <div className="flex items-center gap-3 mt-2 text-xs text-slate-500 flex-wrap">
             <span className="flex items-center gap-1 font-semibold text-slate-700">
-              {order.delivery_type === 'delivery' ? (
-                <Truck className="w-3.5 h-3.5 text-blue-600" />
-              ) : (
-                <MapPin className="w-3.5 h-3.5 text-amber-600" />
-              )}
-              {order.delivery_type === 'delivery' ? 'Доставка курьером' : 'Самовывоз'}
+              {order.delivery_type === 'delivery' ? <Truck className="w-3.5 h-3.5 text-blue-600" /> : <MapPin className="w-3.5 h-3.5 text-amber-600" />}
+              {order.delivery_type === 'delivery' ? 'Доставка' : 'Самовывоз'}
             </span>
             {order.customer?.phone && (
               <span className="flex items-center gap-1 font-medium">
-                <Phone className="w-3.5 h-3.5 text-slate-400" />
-                {order.customer.phone}
+                <Phone className="w-3.5 h-3.5 text-slate-400" /> {order.customer.phone}
               </span>
             )}
             <span className="flex items-center gap-1 text-slate-400 font-medium">
-              <Clock className="w-3.5 h-3.5" />
-              {timeAgo}
+              <Clock className="w-3.5 h-3.5" /> {timeAgo}
             </span>
           </div>
 
@@ -364,20 +337,14 @@ const OrderCard: React.FC<{
           <div className="space-y-1.5">
             {order.items.map((item) => (
               <div key={item.id} className="flex items-center justify-between text-xs">
-                <span className="text-slate-600">
-                  {item.name} × <b>{item.quantity}</b>
-                </span>
-                <span className="text-slate-900 font-bold">
-                  {item.line_total.toLocaleString('ru-RU')} сом
-                </span>
+                <span className="text-slate-600">{item.name} × <b>{item.quantity}</b></span>
+                <span className="text-slate-900 font-bold">{item.line_total.toLocaleString('ru-RU')} сом</span>
               </div>
             ))}
             {Number(order.delivery_fee) > 0 && (
               <div className="flex items-center justify-between text-xs pt-1.5 border-t border-dashed border-slate-200">
                 <span className="text-slate-500">Доставка</span>
-                <span className="text-slate-700 font-semibold">
-                  {Number(order.delivery_fee).toLocaleString('ru-RU')} сом
-                </span>
+                <span className="text-slate-700 font-semibold">{Number(order.delivery_fee).toLocaleString('ru-RU')} сом</span>
               </div>
             )}
           </div>
@@ -413,8 +380,7 @@ const OrderCard: React.FC<{
                   disabled={acting}
                   className="px-4 py-2.5 bg-red-50 hover:bg-red-100 text-red-600 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 active:scale-95 transition-all"
                 >
-                  <XCircle className="w-4 h-4" />
-                  <span>Отменить</span>
+                  <XCircle className="w-4 h-4" /> <span>Отменить</span>
                 </button>
               )}
             </div>

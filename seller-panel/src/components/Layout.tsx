@@ -4,7 +4,6 @@ import { useUIStore } from '../store/ui';
 import {
   ClipboardList,
   Package,
-  Megaphone,
   Settings,
   LogOut,
   Store,
@@ -17,7 +16,6 @@ import {
 const NAV_ITEMS = [
   { to: '/', icon: ClipboardList, label: 'Заказы' },
   { to: '/catalog', icon: Package, label: 'Каталог' },
-  { to: '/marketing', icon: Megaphone, label: 'Рассылка' },
   { to: '/settings', icon: Settings, label: 'Настройки' },
 ] as const;
 
@@ -30,10 +28,10 @@ export default function Layout() {
   return (
     <div className="flex h-screen bg-slate-50">
       {/* Боковое меню для планшетов и десктопов */}
-      <aside className="hidden md:flex md:flex-col md:w-64 bg-brand-dark text-white">
+      <aside className="hidden md:flex md:flex-col md:w-64 bg-slate-900 text-white">
         <div className="flex items-center gap-3 px-5 py-5 border-b border-white/10">
-          <div className="w-9 h-9 bg-brand rounded-lg flex items-center justify-center">
-            <Store className="w-5 h-5 text-brand-dark" />
+          <div className="w-9 h-9 bg-slate-100 rounded-xl flex items-center justify-center">
+            <Store className="w-5 h-5 text-slate-900" />
           </div>
           <div>
             <p className="font-bold text-sm">Appkel</p>
@@ -52,8 +50,8 @@ export default function Layout() {
               className={({ isActive }) =>
                 `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-colors ${
                   isActive
-                    ? 'bg-brand text-brand-dark font-bold'
-                    : 'text-slate-300 hover:bg-white/10 hover:text-white'
+                    ? 'bg-slate-100 text-slate-900 font-bold shadow-sm'
+                    : 'text-slate-400 hover:bg-white/10 hover:text-white'
                 }`
               }
             >
@@ -79,14 +77,14 @@ export default function Layout() {
         {/* Шапка для мобильных */}
         <header className="md:hidden flex items-center justify-between px-4 py-3 bg-white border-b border-slate-100">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 bg-brand-dark rounded-lg flex items-center justify-center">
-              <Store className="w-4 h-4 text-brand" />
+            <div className="w-8 h-8 bg-slate-900 rounded-xl flex items-center justify-center">
+              <Store className="w-4 h-4 text-white" />
             </div>
-            <span className="font-bold text-sm text-slate-900">Appkel</span>
+            <span className="font-black text-base text-slate-900">Appkel</span>
           </div>
           <button
             onClick={signOut}
-            className="text-slate-400 hover:text-slate-600 p-1"
+            className="text-slate-400 hover:text-slate-900 p-1 transition-colors"
           >
             <LogOut className="w-5 h-5" />
           </button>
@@ -98,7 +96,7 @@ export default function Layout() {
         </main>
 
         {/* Нижняя мобильная навигация */}
-        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-2">
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-slate-100 px-2 z-40 pb-safe">
           <div className="flex items-center justify-around">
             {NAV_ITEMS.map((item) => (
               <NavLink
@@ -106,15 +104,15 @@ export default function Layout() {
                 to={item.to}
                 end={item.to === '/'}
                 className={({ isActive }) =>
-                  `flex flex-col items-center gap-0.5 px-3 py-2.5 text-xs font-medium transition-colors ${
-                    isActive ? 'text-brand-dark font-bold' : 'text-slate-400'
+                  `flex flex-col items-center gap-1 px-3 py-3 text-[10px] uppercase tracking-wider transition-colors ${
+                    isActive ? 'text-slate-900 font-black' : 'text-slate-400 font-bold hover:text-slate-600'
                   }`
                 }
               >
                 {({ isActive }) => (
                   <>
                     <item.icon
-                      className={`w-5 h-5 ${isActive ? 'text-brand-600' : ''}`}
+                      className={`w-5 h-5 ${isActive ? 'text-slate-900' : ''}`}
                     />
                     <span>{item.label}</span>
                   </>
@@ -127,13 +125,13 @@ export default function Layout() {
 
       {/* Контейнер всплывающих уведомлений (Toasts) */}
       {toasts.length > 0 && (
-        <div className="fixed top-4 right-4 z-50 space-y-2 max-w-sm w-full pointer-events-none">
+        <div className="fixed top-4 right-4 left-4 md:left-auto z-50 space-y-2 md:max-w-sm pointer-events-none">
           {toasts.map((toast) => (
             <div
               key={toast.id}
-              className={`pointer-events-auto flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg border text-sm font-medium ${
+              className={`pointer-events-auto flex items-center gap-3 px-4 py-3.5 rounded-2xl shadow-xl border text-sm font-bold ${
                 toast.type === 'success'
-                  ? 'bg-green-50 border-green-200 text-green-800'
+                  ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
                   : toast.type === 'error'
                     ? 'bg-red-50 border-red-200 text-red-800'
                     : 'bg-blue-50 border-blue-200 text-blue-800'
@@ -145,7 +143,7 @@ export default function Layout() {
               <span className="flex-1">{toast.message}</span>
               <button
                 onClick={() => removeToast(toast.id)}
-                className="opacity-60 hover:opacity-100 flex-shrink-0"
+                className="opacity-60 hover:opacity-100 flex-shrink-0 transition-opacity p-1"
               >
                 <X className="w-4 h-4" />
               </button>
