@@ -3,7 +3,7 @@ import { supabaseAdmin } from '../lib/supabase.js';
 import { botManager } from '../bot/manager.js';
 import { AdminRequest } from '../types/index.js';
 
-export async function getPlatformMetrics(_req: AdminRequest, res: Response): Promise<void> {
+export async function getPlatformMetrics(req: AdminRequest, res: Response): Promise<void> {
   try {
     const [storesRes, ordersRes] = await Promise.all([
       supabaseAdmin.from('stores').select('id, status, telegram_bot_token'),
@@ -21,7 +21,7 @@ export async function getPlatformMetrics(_req: AdminRequest, res: Response): Pro
   } catch (err) { res.status(500).json({ error: 'Ошибка получения метрик' }); }
 }
 
-export async function getStoresList(_req: AdminRequest, res: Response): Promise<void> {
+export async function getStoresList(req: AdminRequest, res: Response): Promise<void> {
   try {
     const { data: stores, error } = await supabaseAdmin.from('stores').select('*').order('created_at', { ascending: false });
     if (error) return void res.status(500).json({ error: error.message });
@@ -50,7 +50,7 @@ export async function updateStoreByAdmin(req: AdminRequest, res: Response): Prom
   } catch (err) { res.status(500).json({ error: 'Ошибка сервера' }); }
 }
 
-export async function getGlobalProducts(_req: AdminRequest, res: Response): Promise<void> {
+export async function getGlobalProducts(req: AdminRequest, res: Response): Promise<void> {
   try {
     const { data: products, error } = await supabaseAdmin.from('global_products').select(`id, name, barcode, photo_url, unit, category_id, categories(id, name)`).order('name');
     if (error) return void res.status(500).json({ error: error.message });
@@ -100,7 +100,7 @@ export async function updateGlobalProduct(req: AdminRequest, res: Response): Pro
   } catch (err) { res.status(500).json({ error: 'Ошибка обновления товара' }); }
 }
 
-export async function getCategoriesList(_req: AdminRequest, res: Response): Promise<void> {
+export async function getCategoriesList(req: AdminRequest, res: Response): Promise<void> {
   try {
     const { data: categories, error } = await supabaseAdmin.from('categories').select('*').order('sort_order', { ascending: true });
     if (error) return void res.status(500).json({ error: error.message });

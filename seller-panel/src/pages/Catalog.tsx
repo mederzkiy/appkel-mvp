@@ -30,7 +30,6 @@ export default function CatalogPage() {
   const [itemStates, setItemStates] = useState<Record<string, ItemState>>({});
   const addToast = useUIStore((s: any) => s.addToast);
 
-  // Для модалки добавления своего товара
   const [isCreatingCustom, setIsCreatingCustom] = useState(false);
   const [customItem, setCustomItem] = useState({ name: '', price: '', category_name: 'Свои товары', photo_base64: '', photo_preview: '' });
   const [creating, setCreating] = useState(false);
@@ -58,10 +57,12 @@ export default function CatalogPage() {
     }
   };
 
-  useEffect(() => { fetchCatalog(); }, []);
+  useEffect(() => {
+    fetchCatalog();
+  }, []);
 
   const updateItem = (gpId: string, updates: Partial<ItemState>) => {
-    setItemStates((prev) => ({
+    setItemStates((prev: Record<string, ItemState>) => ({
       ...prev,
       [gpId]: { ...prev[gpId], ...updates, dirty: true },
     }));
@@ -79,7 +80,7 @@ export default function CatalogPage() {
       return;
     }
 
-    setItemStates((prev) => ({ ...prev, [gpId]: { ...prev[gpId], saving: true } }));
+    setItemStates((prev: Record<string, ItemState>) => ({ ...prev, [gpId]: { ...prev[gpId], saving: true } }));
 
     try {
       await apiPost('/api/seller/catalog/toggle', {
@@ -88,10 +89,10 @@ export default function CatalogPage() {
         old_price: oldPrice,
         is_active: state.enabled,
       });
-      setItemStates((prev) => ({ ...prev, [gpId]: { ...prev[gpId], saving: false, dirty: false } }));
+      setItemStates((prev: Record<string, ItemState>) => ({ ...prev, [gpId]: { ...prev[gpId], saving: false, dirty: false } }));
       addToast('Товар обновлён', 'success');
     } catch (err: any) {
-      setItemStates((prev) => ({ ...prev, [gpId]: { ...prev[gpId], saving: false } }));
+      setItemStates((prev: Record<string, ItemState>) => ({ ...prev, [gpId]: { ...prev[gpId], saving: false } }));
       addToast(err.message || 'Ошибка сохранения', 'error');
     }
   };
@@ -103,7 +104,7 @@ export default function CatalogPage() {
     const price = parseFloat(state.price) || 0;
     const oldPrice = state.oldPrice ? parseFloat(state.oldPrice) : null;
 
-    setItemStates((prev) => ({ ...prev, [gpId]: { ...prev[gpId], enabled: newEnabled, saving: true } }));
+    setItemStates((prev: Record<string, ItemState>) => ({ ...prev, [gpId]: { ...prev[gpId], enabled: newEnabled, saving: true } }));
 
     try {
       await apiPost('/api/seller/catalog/toggle', {
@@ -112,9 +113,10 @@ export default function CatalogPage() {
         old_price: oldPrice,
         is_active: newEnabled,
       });
-      setItemStates((prev) => ({ ...prev, [gpId]: { ...prev[gpId], enabled: newEnabled, saving: false, dirty: false } }));
+      setItemStates((prev: Record<string, ItemState>) => ({ ...prev, [gpId]: { ...prev[gpId], enabled: newEnabled, saving: false, dirty: false } }));
+      addToast(newEnabled ? 'Товар включён' : 'Товар отключён', 'success');
     } catch (err: any) {
-      setItemStates((prev) => ({ ...prev, [gpId]: { ...prev[gpId], enabled: !newEnabled, saving: false } }));
+      setItemStates((prev: Record<string, ItemState>) => ({ ...prev, [gpId]: { ...prev[gpId], enabled: !newEnabled, saving: false } }));
       addToast(err.message || 'Ошибка обновления', 'error');
     }
   };
@@ -151,7 +153,7 @@ export default function CatalogPage() {
     }
   };
 
-  const filtered = search.trim() ? catalog.filter((item) => item.name.toLowerCase().includes(search.toLowerCase())) : catalog;
+  const filtered = search.trim() ? catalog.filter((item: CatalogItem) => item.name.toLowerCase().includes(search.toLowerCase())) : catalog;
 
   const grouped = new Map<string, CatalogItem[]>();
   for (const item of filtered) {
@@ -162,32 +164,36 @@ export default function CatalogPage() {
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-slate-400" /></div>;
 
+  const activeCount = catalog.filter((i: CatalogItem) => itemStates[i.global_product_id]?.enabled).length;
+
   return (
     <div className="p-4 md:p-6 max-w-4xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-black text-slate-900">Каталог товаров</h1>
-          <p className="text-xs text-slate-500 mt-0.5">Включите нужные товары на свою витрину</p>
+          <h1 className="text-2xl font-black text-slate-900">Управление каталогом</h1>
+          <p className="text-xs text-slate-500 mt-0.5">Включено {activeCount} из {catalog.length} товаров. Задавайте скидки через поле «Старая цена».</p>
         </div>
-        <button onClick={() => setIsCreatingCustom(true)} className="bg-slate-900 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 active:scale-95 transition-transform">
+        <button onClick={() => setIsCreatingCustom(true)} className="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2.5 rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-transform active:scale-95">
           <Plus className="w-4 h-4" /> Добавить свой товар
         </button>
       </div>
 
       <div className="relative">
         <Search className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-        <input type="text" value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Поиск по названию..." className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs focus:ring-2 focus:ring-slate-900 outline-none" />
+        <input type="text" value={search} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setSearch(e.target.value)} placeholder="Поиск по названию..." className="w-full pl-10 pr-4 py-2.5 bg-white border border-slate-200 rounded-2xl text-xs focus:outline-none focus:ring-2 focus:ring-slate-900" />
       </div>
 
       <div className="space-y-6">
-        {Array.from(grouped.entries()).map(([catName, items]) => (
+        {Array.from(grouped.entries()).map(([catName, items]: [string, CatalogItem[]]) => (
           <div key={catName} className="space-y-2.5">
             <h2 className="text-xs font-bold text-slate-400 uppercase tracking-wider px-1">{catName}</h2>
             <div className="space-y-2">
-              {items.map((item) => {
+              {items.map((item: CatalogItem) => {
                 const state = itemStates[item.global_product_id];
                 if (!state) return null;
-                const hasDiscount = Boolean(parseFloat(state.oldPrice) > parseFloat(state.price));
+                const oldPriceNum = parseFloat(state.oldPrice);
+                const currentPriceNum = parseFloat(state.price);
+                const hasDiscount = !isNaN(oldPriceNum) && !isNaN(currentPriceNum) && oldPriceNum > currentPriceNum;
 
                 return (
                   <div key={item.global_product_id} className={`bg-white border rounded-3xl p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-all ${!state.enabled ? 'opacity-50 bg-slate-50/70 border-slate-100' : hasDiscount ? 'border-amber-300 bg-amber-50/20' : 'border-slate-200 shadow-sm'}`}>
@@ -206,11 +212,11 @@ export default function CatalogPage() {
                     <div className="flex items-center justify-between sm:justify-end gap-2.5 flex-shrink-0 pt-2 sm:pt-0 border-t sm:border-t-0 border-slate-100">
                       <div className="flex flex-col items-end">
                         <span className="text-[9px] text-slate-400 font-medium">Старая цена</span>
-                        <input type="number" value={state.oldPrice} onChange={(e) => updateItem(item.global_product_id, { oldPrice: e.target.value })} onBlur={() => { if (state.dirty && state.enabled) saveItem(item.global_product_id); }} disabled={!state.enabled} placeholder="—" className="w-20 px-2 py-1.5 rounded-xl border border-dashed border-slate-200 text-xs font-medium text-right text-slate-500 focus:outline-none focus:border-amber-400 disabled:bg-slate-50" />
+                        <input type="number" value={state.oldPrice} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateItem(item.global_product_id, { oldPrice: e.target.value })} onBlur={() => { if (state.dirty && state.enabled) saveItem(item.global_product_id); }} disabled={!state.enabled} placeholder="—" className="w-20 px-2 py-1.5 rounded-xl border border-dashed border-slate-200 text-xs font-medium text-right text-slate-500 focus:outline-none focus:border-amber-400 disabled:bg-slate-50" />
                       </div>
                       <div className="flex flex-col items-end">
                         <span className="text-[9px] text-slate-400 font-medium">Цена сом *</span>
-                        <input type="number" value={state.price} onChange={(e) => updateItem(item.global_product_id, { price: e.target.value })} onBlur={() => { if (state.dirty && state.enabled) saveItem(item.global_product_id); }} disabled={!state.enabled} placeholder="0" className="w-20 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-black text-right text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:bg-slate-50" />
+                        <input type="number" value={state.price} onChange={(e: React.ChangeEvent<HTMLInputElement>) => updateItem(item.global_product_id, { price: e.target.value })} onBlur={() => { if (state.dirty && state.enabled) saveItem(item.global_product_id); }} disabled={!state.enabled} placeholder="0" className="w-20 px-2.5 py-1.5 rounded-xl border border-slate-200 text-xs font-black text-right text-slate-900 focus:outline-none focus:ring-2 focus:ring-slate-900 disabled:bg-slate-50" />
                       </div>
                       {state.dirty && state.enabled && (
                         <button onClick={() => saveItem(item.global_product_id)} disabled={state.saving} className="p-2 rounded-xl bg-slate-900 text-white active:scale-90 self-end">
@@ -233,25 +239,25 @@ export default function CatalogPage() {
       </div>
 
       {isCreatingCustom && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50 backdrop-blur-sm p-4">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex justify-between items-center">
-              <h2 className="font-bold">Новый свой товар</h2>
-              <button onClick={() => setIsCreatingCustom(false)}><X className="w-5 h-5 text-slate-400" /></button>
+              <h2 className="text-lg font-black text-slate-900">Новый свой товар</h2>
+              <button onClick={() => setIsCreatingCustom(false)} className="p-1 hover:bg-slate-100 rounded-lg transition-colors"><X className="w-5 h-5 text-slate-400" /></button>
             </div>
             <form onSubmit={handleCreateCustom} className="space-y-4">
               <div className="flex items-center gap-4">
                 <div className="w-16 h-16 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
                   {customItem.photo_preview ? <img src={customItem.photo_preview} alt="" className="w-full h-full object-cover" /> : <ImageOff className="w-6 h-6 text-slate-300" />}
                 </div>
-                <label className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold text-center cursor-pointer">
+                <label className="flex-1 px-4 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold text-center cursor-pointer transition-colors border border-slate-200">
                   <Upload className="w-4 h-4 inline mr-1" /> Загрузить фото
                   <input type="file" accept="image/*" onChange={handleCustomPhotoUpload} className="hidden" />
                 </label>
               </div>
-              <input type="text" placeholder="Название товара *" value={customItem.name} onChange={e => setCustomItem({...customItem, name: e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl text-xs border border-slate-200" required />
-              <input type="number" placeholder="Цена *" value={customItem.price} onChange={e => setCustomItem({...customItem, price: e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl text-xs border border-slate-200" required />
-              <button type="submit" disabled={creating} className="w-full py-3 bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2">
+              <input type="text" placeholder="Название товара *" value={customItem.name} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomItem({...customItem, name: e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl text-xs border border-slate-200 outline-none focus:border-slate-400" required />
+              <input type="number" placeholder="Цена (сом) *" value={customItem.price} onChange={(e: React.ChangeEvent<HTMLInputElement>) => setCustomItem({...customItem, price: e.target.value})} className="w-full p-3 bg-slate-50 rounded-xl text-xs border border-slate-200 outline-none focus:border-slate-400" required />
+              <button type="submit" disabled={creating} className="w-full py-3 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center justify-center gap-2 transition-colors mt-2">
                 {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Plus className="w-4 h-4" />} Создать товар
               </button>
             </form>

@@ -1,5 +1,6 @@
 import { Router } from 'express';
-import { requireAdminAuth } from '../middleware/admin-auth.js';
+// Забираем мидлвар авторизации с правильным именем
+import { requireSuperAdminAuth } from '../middleware/admin-auth.js';
 import {
   getPlatformMetrics,
   getStoresList,
@@ -12,7 +13,7 @@ import {
 } from '../controllers/admin.js';
 
 const router = Router();
-router.use(requireAdminAuth);
+router.use(requireSuperAdminAuth);
 
 router.get('/metrics', getPlatformMetrics);
 router.get('/stores', getStoresList);
@@ -20,7 +21,7 @@ router.patch('/stores/:id', updateStoreByAdmin);
 
 router.get('/global-products', getGlobalProducts);
 router.post('/global-products', createGlobalProduct);
-router.patch('/global-products/:id', updateGlobalProduct); // Новый роут!
+router.patch('/global-products/:id', updateGlobalProduct);
 
 router.get('/categories', getCategoriesList);
 router.post('/categories', createCategory);

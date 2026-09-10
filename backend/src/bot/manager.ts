@@ -2,7 +2,7 @@ import { Bot, InlineKeyboard, Keyboard } from 'grammy';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { config } from '../config/env.js';
 
-// Хранилище для процесса привязки магазина (вместо ctx.session)
+// Хранилище для процесса привязки магазина (чтобы не использовать session)
 const pendingSetups = new Map<number, string>();
 
 class BotManager {
@@ -92,7 +92,6 @@ class BotManager {
     bot.start({ onStart: (info) => console.log(`[BotManager] Бот @${info.username} запущен`) });
   }
 
-  // Адаптеры с опциональными аргументами, чтобы не ломать старые контроллеры
   async startBot(storeId?: string, token?: string, storeName?: string) { return true; }
   async stopBot(storeId?: string) {}
   isBotOnline(storeId?: string) { return this.mainBot !== null; }
