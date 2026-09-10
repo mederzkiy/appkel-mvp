@@ -1,42 +1,35 @@
 import { create } from 'zustand';
-import type { Session, User } from '@supabase/supabase-js';
 import { supabase } from '../lib/supabase';
 
 interface AuthState {
-  user: User | null;
-  session: Session | null;
+  user: any | null;
   loading: boolean;
-  initialize: () => () => void;
-  signIn: (email: string, password: string) => Promise<void>;
+  checkAuth: () => Promise<void>;
   signOut: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   user: null,
-  session: null,
   loading: true,
+  checkAuth: async () => {
+    try {
+      // Только классическая авторизация Supabase
+      const { data: { session }, error } = await supabase.auth.getSession();
+      
+      if (error) throw error;
+      
+      set({ user: session?.user || null, loading: false });
 
-  initialize: () => {
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      set({ session, user: session?.user ?? null, loading: false });
-    });
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange((_event, session) => {
-      set({ session, user: session?.user ?? null, loading: false });
-    });
-
-    return () => subscription.unsubscribe();
+      supabase.auth.onAuthStateChange((_event, session) => {
+        set({ user: session?.user || null });
+      });
+    } catch (err) {
+      console.error('[Admin Auth] Error:', err);
+      set({ user: null, loading: false });
+    }
   },
-
-  signIn: async (email, password) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
-    if (error) throw new Error(error.message);
-  },
-
   signOut: async () => {
     await supabase.auth.signOut();
-    set({ user: null, session: null });
+    set({ user: null });
   },
 }));
