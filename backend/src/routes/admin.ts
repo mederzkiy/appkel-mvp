@@ -1,25 +1,27 @@
 import { Router } from 'express';
-import { requireSuperAdminAuth } from '../middleware/admin-auth.js';
+import { requireAdminAuth } from '../middleware/admin-auth.js';
 import {
   getPlatformMetrics,
   getStoresList,
   updateStoreByAdmin,
   getGlobalProducts,
   createGlobalProduct,
+  updateGlobalProduct,
   getCategoriesList,
   createCategory,
 } from '../controllers/admin.js';
 
 const router = Router();
-
-// Защищено Supabase Auth (JWT + роль super_admin)
-router.use(requireSuperAdminAuth);
+router.use(requireAdminAuth);
 
 router.get('/metrics', getPlatformMetrics);
 router.get('/stores', getStoresList);
 router.patch('/stores/:id', updateStoreByAdmin);
+
 router.get('/global-products', getGlobalProducts);
 router.post('/global-products', createGlobalProduct);
+router.patch('/global-products/:id', updateGlobalProduct); // Новый роут!
+
 router.get('/categories', getCategoriesList);
 router.post('/categories', createCategory);
 

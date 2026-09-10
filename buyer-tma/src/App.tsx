@@ -6,13 +6,13 @@ import CartView from './views/CartView';
 import CheckoutView from './views/CheckoutView';
 import PaymentView from './views/PaymentView';
 import OrderStatusView from './views/OrderStatusView';
+import { StoreListView } from './views/StoreListView';
 import { Loader2, AlertTriangle } from 'lucide-react';
 
 const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined;
 
 export default function App() {
   const currentView = useAppStore((s) => s.currentView);
-  const storeId = useAppStore((s) => s.storeId);
   const setStoreId = useAppStore((s) => s.setStoreId);
   const setStoreInfo = useAppStore((s) => s.setStoreInfo);
   const goBack = useAppStore((s) => s.goBack);
@@ -20,32 +20,29 @@ export default function App() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
+  // Получаем store_id из query или start_param Telegram
+  const params = new URLSearchParams(window.location.search);
+  const targetStoreId =
+    params.get('store_id') ||
+    tg?.initDataUnsafe?.start_param ||
+    '';
+
   useEffect(() => {
-    // 1. Инициализация Telegram WebApp
     if (tg) {
       tg.ready();
       tg.expand();
-
-      // Привязываем системную кнопку «Назад»
       tg.BackButton.onClick(goBack);
     }
 
-    // 2. Получение store_id из query или startapp параметра
-    const params = new URLSearchParams(window.location.search);
-    const targetStoreId =
-      params.get('store_id') ||
-      tg?.initDataUnsafe?.start_param ||
-      '';
-
+    // Если store_id нет — не грузим магазин, сразу отдаем управление StoreListView
     if (!targetStoreId) {
-      setError('Не указан идентификатор магазина (store_id). Откройте бота заново.');
       setLoading(false);
       return;
     }
 
     setStoreId(targetStoreId);
 
-    // 3. Загружаем информацию о магазине
+    // Загружаем инфо о конкретном магазине
     api
       .getStoreInfo(targetStoreId)
       .then((res) => {
@@ -60,8 +57,14 @@ export default function App() {
     return () => {
       tg?.BackButton.offClick(goBack);
     };
-  }, [setStoreId, setStoreInfo, goBack]);
+  }, [targetStoreId, setStoreId, setStoreInfo, goBack]);
 
+  // Сценарий 1: Пользователь зашел без store_id -> Показываем магазины поблизости
+  if (!targetStoreId) {
+    return <StoreListView />;
+  }
+
+  // Сценарий 2: Загрузка конкретного магазина
   if (loading) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center bg-tg-bg text-tg-text">
@@ -71,16 +74,26 @@ export default function App() {
     );
   }
 
+  // Сценарий 3: Ошибка при открытии магазина
   if (error) {
     return (
       <div className="min-h-screen flex flex-col items-center justify-center p-6 text-center bg-tg-bg text-tg-text">
         <AlertTriangle className="w-12 h-12 text-amber-500 mb-3" />
         <h2 className="text-base font-bold">Не удалось открыть витрину</h2>
         <p className="text-xs text-tg-hint mt-1 max-w-xs">{error}</p>
+        <button
+          onClick={() => {
+            window.location.href = window.location.pathname;
+          }}
+          className="mt-4 px-4 py-2 bg-tg-button text-tg-button-text rounded-lg text-xs font-semibold"
+        >
+          Посмотреть другие магазины
+        </button>
       </div>
     );
   }
 
+  // Сценарий 4: Витрина конкретного магазина
   return (
     <div className="min-h-screen bg-tg-bg text-tg-text">
       {currentView === 'catalog' && <CatalogView />}

@@ -6,17 +6,19 @@ import {
   createOrder,
   confirmPayment,
   getMyOrders,
+  getNearbyStores
 } from '../controllers/buyer.js';
 
 const router = Router();
 
 // === ПУБЛИЧНЫЕ ЭНДПОИНТЫ ===
-// Позволяют просматривать меню и информацию о магазине из обычного браузера
+// Сначала ищем магазины поблизости
+router.get('/stores/nearby', getNearbyStores);
+// Затем инфо и каталог конкретного магазина
 router.get('/stores/:storeId/info', getStoreInfo);
 router.get('/stores/:storeId/catalog', getStoreCatalog);
 
 // === ЗАЩИЩЕННЫЕ ЭНДПОИНТЫ ===
-// Все маршруты ниже требуют авторизации через Telegram Mini App
 router.use(requireTmaAuth());
 
 router.post('/orders', createOrder);

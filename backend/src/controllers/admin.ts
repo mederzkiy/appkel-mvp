@@ -20,7 +20,7 @@ export async function getPlatformMetrics(_req: AdminRequest, res: Response): Pro
     const totalStores = stores.length;
     const activeStores = stores.filter((s) => s.status === 'active').length;
 
-    // Считаем активные live боты
+    // Считаем активные live боты (теперь у нас Единый бот, проверяем глобальный онлайн)
     let liveBots = 0;
     stores.forEach((s) => {
       if (s.telegram_bot_token && botManager.isBotOnline(s.id)) {
@@ -51,7 +51,7 @@ export async function getPlatformMetrics(_req: AdminRequest, res: Response): Pro
 }
 
 /**
- * Список всех магазинов платформы со статусом ботов
+ * Список всех магазинов платформы
  * GET /api/admin/stores
  */
 export async function getStoresList(_req: AdminRequest, res: Response): Promise<void> {
@@ -66,7 +66,6 @@ export async function getStoresList(_req: AdminRequest, res: Response): Promise<
       return;
     }
 
-    // Собираем email владельцев через Auth Admin API
     const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
     const userEmailMap = new Map<string, string>();
     (users || []).forEach((u) => {
@@ -89,22 +88,27 @@ export async function getStoresList(_req: AdminRequest, res: Response): Promise<
 }
 
 /**
- * Обновление статуса магазина и срока подписки (с динамическим стартом/стопом бота)
+ * Обновление статуса магазина и срока подписки
  * PATCH /api/admin/stores/:id
  */
 export async function updateStoreByAdmin(req: AdminRequest, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-    const { status, subscription_expires_at } = req.body;
+    const { status, subscription_expires_at, latitude, longitude } = req.body;
+
+    const updatePayload: any = {
+      status,
+      subscription_expires_at: subscription_expires_at || null,
+    };
+
+    if (latitude !== undefined) updatePayload.latitude = latitude;
+    if (longitude !== undefined) updatePayload.longitude = longitude;
 
     const { data: updated, error } = await supabaseAdmin
       .from('stores')
-      .update({
-        status,
-        subscription_expires_at: subscription_expires_at || null,
-      })
+      .update(updatePayload)
       .eq('id', id)
-      .select('id, name, status, telegram_bot_token')
+      .select('*')
       .single();
 
     if (error || !updated) {
@@ -112,7 +116,8 @@ export async function updateStoreByAdmin(req: AdminRequest, res: Response): Prom
       return;
     }
 
-    // Управление жизненным циклом бота
+    // Если боты индивидуальные, запускаем/останавливаем. 
+    // Для Единого бота это просто заглушка совместимости.
     if (updated.telegram_bot_token) {
       if (updated.status === 'active') {
         await botManager.startBot(updated.id, updated.telegram_bot_token, updated.name);
@@ -129,7 +134,7 @@ export async function updateStoreByAdmin(req: AdminRequest, res: Response): Prom
 }
 
 /**
- * Получение глобального каталога товаров с количеством использующих магазинов
+ * Получение глобального каталога товаров
  * GET /api/admin/global-products
  */
 export async function getGlobalProducts(_req: AdminRequest, res: Response): Promise<void> {
@@ -141,12 +146,11 @@ export async function getGlobalProducts(_req: AdminRequest, res: Response): Prom
         name,
         barcode,
         photo_url,
+        unit,
+        category_id,
         categories (
           id,
           name
-        ),
-        store_products (
-          id
         )
       `)
       .order('name');
@@ -156,16 +160,7 @@ export async function getGlobalProducts(_req: AdminRequest, res: Response): Prom
       return;
     }
 
-    const formatted = (products || []).map((p: any) => ({
-      id: p.id,
-      name: p.name,
-      barcode: p.barcode,
-      photo_url: p.photo_url,
-      category_name: p.categories?.name || null,
-      stores_using: p.store_products ? p.store_products.length : 0,
-    }));
-
-    res.json({ products: formatted });
+    res.json({ products: products || [] });
   } catch (err) {
     console.error('[Admin getGlobalProducts Error]:', err);
     res.status(500).json({ error: 'Ошибка каталога' });
@@ -173,15 +168,15 @@ export async function getGlobalProducts(_req: AdminRequest, res: Response): Prom
 }
 
 /**
- * Добавление нового мастер-товара в глобальный каталог
+ * Добавление нового мастер-товара
  * POST /api/admin/global-products
  */
 export async function createGlobalProduct(req: AdminRequest, res: Response): Promise<void> {
   try {
-    const { name, category_id, photo_url, barcode } = req.body;
+    const { name, category_id, photo_url, barcode, unit } = req.body;
 
-    if (!name || typeof name !== 'string') {
-      res.status(400).json({ error: 'Название товара обязательно' });
+    if (!name || !category_id) {
+      res.status(400).json({ error: 'Название и категория обязательны' });
       return;
     }
 
@@ -189,9 +184,10 @@ export async function createGlobalProduct(req: AdminRequest, res: Response): Pro
       .from('global_products')
       .insert({
         name: name.trim(),
-        category_id: category_id || null,
+        category_id,
         photo_url: photo_url || null,
         barcode: barcode ? barcode.trim() : null,
+        unit: unit || 'шт',
       })
       .select('*')
       .single();
@@ -205,6 +201,40 @@ export async function createGlobalProduct(req: AdminRequest, res: Response): Pro
   } catch (err) {
     console.error('[Admin createGlobalProduct Error]:', err);
     res.status(500).json({ error: 'Ошибка создания товара' });
+  }
+}
+
+/**
+ * Обновление мастер-товара
+ * PATCH /api/admin/global-products/:id
+ */
+export async function updateGlobalProduct(req: AdminRequest, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { name, category_id, photo_url, barcode, unit } = req.body;
+
+    const { data: product, error } = await supabaseAdmin
+      .from('global_products')
+      .update({
+        name: name?.trim(),
+        category_id,
+        photo_url: photo_url || null,
+        barcode: barcode ? barcode.trim() : null,
+        unit: unit || 'шт',
+      })
+      .eq('id', id)
+      .select('*')
+      .single();
+
+    if (error) {
+      res.status(400).json({ error: error.message });
+      return;
+    }
+
+    res.json({ product });
+  } catch (err) {
+    console.error('[Admin updateGlobalProduct Error]:', err);
+    res.status(500).json({ error: 'Ошибка обновления товара' });
   }
 }
 

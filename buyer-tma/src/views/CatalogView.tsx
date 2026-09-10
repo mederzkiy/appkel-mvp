@@ -1,5 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
-import { ShoppingBag, Plus, Minus, ImageOff, Loader2 } from 'lucide-react';
+import { ShoppingBag, Plus, Minus, ImageOff, Loader2, MapPin } from 'lucide-react';
 import { api, ProductItem } from '../api/client';
 import { useCartStore } from '../store/cart';
 import { useAppStore } from '../store/app';
@@ -52,6 +52,10 @@ export default function CatalogView() {
     }
   };
 
+  const handleOpenNearbyStores = () => {
+    window.location.href = window.location.pathname;
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col items-center justify-center min-h-[70vh]">
@@ -63,10 +67,19 @@ export default function CatalogView() {
 
   return (
     <div className="pb-28">
-      {/* Шапка магазина */}
-      <div className="px-4 pt-4 pb-2">
-        <h1 className="text-xl font-bold text-tg-text">{storeInfo?.name || 'Витрина магазина'}</h1>
-        <p className="text-xs text-tg-hint mt-0.5">{storeInfo?.address || 'Быстрая доставка'}</p>
+      {/* Шапка магазина с кнопкой перехода ко всем магазинам */}
+      <div className="px-4 pt-4 pb-2 flex justify-between items-start">
+        <div>
+          <h1 className="text-xl font-bold text-tg-text">{storeInfo?.name || 'Витрина магазина'}</h1>
+          <p className="text-xs text-tg-hint mt-0.5">{storeInfo?.address || 'Быстрая доставка'}</p>
+        </div>
+        <button
+          onClick={handleOpenNearbyStores}
+          className="flex items-center gap-1 bg-tg-secondary-bg text-tg-text px-2.5 py-1.5 rounded-xl text-xs font-medium border border-black/5 active:scale-95 transition-transform"
+        >
+          <MapPin className="w-3.5 h-3.5 text-blue-500" />
+          <span>Другие магазины</span>
+        </button>
       </div>
 
       {/* Горизонтальные плашки категорий (Pills) */}
@@ -100,12 +113,24 @@ export default function CatalogView() {
       <div className="p-4 grid grid-cols-2 gap-3">
         {filteredCatalog.map((product) => {
           const qty = items[product.id]?.quantity || 0;
+          const isDiscount = Boolean(product.old_price && product.old_price > product.price);
 
           return (
             <div
               key={product.id}
-              className="bg-tg-secondary-bg rounded-2xl p-2.5 flex flex-col justify-between"
+              className={`relative rounded-2xl p-2.5 flex flex-col justify-between transition-all ${
+                isDiscount
+                  ? 'bg-amber-50/50 border-2 border-amber-300 shadow-sm'
+                  : 'bg-tg-secondary-bg'
+              }`}
             >
+              {/* Плашка Акция */}
+              {isDiscount && (
+                <span className="absolute top-2 left-2 z-10 bg-amber-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider shadow-sm">
+                  Акция
+                </span>
+              )}
+
               <div>
                 {/* Фото товара */}
                 <div className="aspect-square bg-tg-bg rounded-xl overflow-hidden flex items-center justify-center mb-2">
@@ -120,13 +145,22 @@ export default function CatalogView() {
                   )}
                 </div>
 
-                {/* Название и цена */}
+                {/* Название */}
                 <p className="text-xs font-semibold text-tg-text line-clamp-2 leading-tight">
                   {product.name}
                 </p>
-                <p className="text-sm font-bold text-tg-text mt-1">
-                  {product.price.toLocaleString('ru-RU')} сом
-                </p>
+
+                {/* Блок цены со скидкой */}
+                <div className="mt-1 flex items-baseline gap-1.5 flex-wrap">
+                  <span className="text-sm font-bold text-tg-text">
+                    {product.price.toLocaleString('ru-RU')} сом
+                  </span>
+                  {isDiscount && (
+                    <span className="text-[11px] text-gray-400 line-through">
+                      {product.old_price?.toLocaleString('ru-RU')} сом
+                    </span>
+                  )}
+                </div>
               </div>
 
               {/* Кнопка добавления / счётчик */}

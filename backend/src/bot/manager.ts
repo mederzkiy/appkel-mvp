@@ -25,8 +25,45 @@ class BotManager {
       const bot = this.mainBot;
 
       bot.command('start', async (ctx) => {
-        const deepLinkPayload = ctx.match; 
-        
+        const deepLinkPayload = ctx.match; // Содержит текст после /start, например "store_1234"
+
+        let welcomeMessage = `Здравствуйте, ${ctx.from?.first_name || 'дорогой клиент'}! 👋\n\nДобро пожаловать в маркетплейс Appkel.`;
+        let isStoreDeepLink = false;
+        let storeId = '';
+
+        // Проверяем, перешел ли клиент по QR-коду магазина
+        if (deepLinkPayload && deepLinkPayload.startsWith('store_')) {
+          storeId = deepLinkPayload.replace('store_', '');
+          isStoreDeepLink = true;
+          
+          // Пытаемся найти магазин в БД
+          const { data: store } = await supabaseAdmin
+            .from('stores')
+            .select('name')
+            .eq('id', storeId)
+            .single();
+
+          if (store) {
+            welcomeMessage = `Здравствуйте, ${ctx.from?.first_name || 'дорогой клиент'}! 👋\n\nДобро пожаловать в магазин <b>«${store.name}»</b>!`;
+          }
+        }
+
+        // Если это заход в конкретный магазин, предлагаем сразу открыть его витрину
+        if (isStoreDeepLink && storeId) {
+          const webAppUrl = `${config.tma.baseUrl}?store_id=${storeId}`;
+          const inlineKeyboard = new InlineKeyboard().webApp(
+            `🛍 Открыть магазин`,
+            webAppUrl
+          );
+
+          await ctx.reply(welcomeMessage + `\nНажмите кнопку ниже, чтобы открыть каталог:`, {
+            reply_markup: inlineKeyboard,
+            parse_mode: 'HTML'
+          });
+          return; // Останавливаем выполнение, так как координаты для конкретного магазина запрашивать необязательно
+        }
+
+        // Если заход общий, запрашиваем координаты для подбора ближайших магазинов
         const requestKeyboard = new Keyboard()
           .requestContact('📱 Поделиться номером').row()
           .requestLocation('📍 Поделиться локацией')
@@ -34,10 +71,9 @@ class BotManager {
           .oneTime();
 
         await ctx.reply(
-          `Здравствуйте, ${ctx.from?.first_name || 'дорогой клиент'}! 👋\n\n` +
-          `Добро пожаловать в маркетплейс Appkel.\n` +
-          `Чтобы мы могли показать ближайшие магазины и рассчитать стоимость доставки, пожалуйста, поделитесь номером телефона и вашей локацией (используйте кнопки ниже).`,
-          { reply_markup: requestKeyboard }
+          welcomeMessage + 
+          `\n\nЧтобы мы могли показать ближайшие магазины и рассчитать стоимость доставки, пожалуйста, поделитесь номером телефона и вашей локацией (используйте кнопки ниже).`,
+          { reply_markup: requestKeyboard, parse_mode: 'HTML' }
         );
       });
 
@@ -160,6 +196,7 @@ class BotManager {
       } catch {
         failed++;
       }
+      // Небольшая задержка, чтобы не поймать лимиты Telegram
       await new Promise((resolve) => setTimeout(resolve, 50));
     }
 
