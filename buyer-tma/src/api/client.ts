@@ -1,6 +1,6 @@
 /// <reference types="vite/client" />
 const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : undefined;
-const API_BASE_URL = 'https://appkel-backend.onrender.com';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000';
 
 export interface StoreInfo {
   id: string;

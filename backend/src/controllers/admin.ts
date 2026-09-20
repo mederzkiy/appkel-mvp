@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { botManager } from '../bot/manager.js';
 import { AdminRequest } from '../types/index.js';
+import { resolvePhotoUrl } from '../utils/storage.js';
 
 export async function getPlatformMetrics(req: AdminRequest, res: Response): Promise<void> {
   try {
@@ -62,17 +63,9 @@ export async function createGlobalProduct(req: AdminRequest, res: Response): Pro
   try {
     const { name, category_id, photo_url, barcode, unit, base64_image } = req.body;
     if (!name || !category_id) return void res.status(400).json({ error: 'Название и категория обязательны' });
-    let finalPhotoUrl = photo_url || null;
-    if (base64_image) {
-      const matches = base64_image.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-      if (matches && matches.length === 3) {
-        const buffer = Buffer.from(matches[2], 'base64');
-        const ext = matches[1].split('/')[1] || 'png';
-        const filePath = `products/prod_${Date.now()}.${ext}`;
-        await supabaseAdmin.storage.from('stores').upload(filePath, buffer, { contentType: matches[1], upsert: true });
-        finalPhotoUrl = supabaseAdmin.storage.from('stores').getPublicUrl(filePath).data.publicUrl;
-      }
-    }
+
+    const finalPhotoUrl = await resolvePhotoUrl(base64_image, photo_url, 'products');
+
     const { data: product, error } = await supabaseAdmin.from('global_products').insert({ name: name.trim(), category_id, photo_url: finalPhotoUrl, barcode: barcode ? barcode.trim() : null, unit: unit || 'шт' }).select('*').single();
     if (error) return void res.status(400).json({ error: error.message });
     res.status(201).json({ product });
@@ -83,17 +76,9 @@ export async function updateGlobalProduct(req: AdminRequest, res: Response): Pro
   try {
     const { id } = req.params;
     const { name, category_id, photo_url, barcode, unit, base64_image } = req.body;
-    let finalPhotoUrl = photo_url;
-    if (base64_image) {
-      const matches = base64_image.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-      if (matches && matches.length === 3) {
-        const buffer = Buffer.from(matches[2], 'base64');
-        const ext = matches[1].split('/')[1] || 'png';
-        const filePath = `products/prod_${Date.now()}.${ext}`;
-        await supabaseAdmin.storage.from('stores').upload(filePath, buffer, { contentType: matches[1], upsert: true });
-        finalPhotoUrl = supabaseAdmin.storage.from('stores').getPublicUrl(filePath).data.publicUrl;
-      }
-    }
+
+    const finalPhotoUrl = await resolvePhotoUrl(base64_image, photo_url, 'products');
+
     const { data: product, error } = await supabaseAdmin.from('global_products').update({ name: name?.trim(), category_id, photo_url: finalPhotoUrl, barcode: barcode ? barcode.trim() : null, unit: unit || 'шт' }).eq('id', id).select('*').single();
     if (error) return void res.status(400).json({ error: error.message });
     res.json({ product });

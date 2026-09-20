@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import * as authModule from '../middleware/auth.js';
+import { requireSellerAuth } from '../middleware/seller-auth.js';
 import {
   getSellerStore,
   updateSellerStore,
@@ -14,8 +14,7 @@ import {
 } from '../controllers/seller.js';
 
 const router = Router();
-const sellerAuth = (authModule as any).requireSellerAuth || (authModule as any).requireAuth || ((req: any, res: any, next: any) => next());
-router.use(sellerAuth());
+router.use(requireSellerAuth);
 
 router.get('/store', getSellerStore);
 router.put('/store', updateSellerStore);

@@ -18,6 +18,7 @@ export const config = {
     serviceRoleKey: getEnv('SUPABASE_SERVICE_ROLE_KEY'),
   },
   tma: {
-    baseUrl: getEnv('TMA_BASE_URL', 'http://localhost:5173'),
+    buyerUrl: getEnv('TMA_BUYER_URL', 'http://localhost:5173'),
+    sellerUrl: getEnv('TMA_SELLER_URL', 'http://localhost:5174'),
   },
 };

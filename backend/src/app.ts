@@ -6,7 +6,7 @@ export const app = express();
 
 // Мидлвары безопасности и парсинга
 app.use(cors({ origin: true, credentials: true }));
-app.use(express.json());
+app.use(express.json({ limit: '10mb' }));
 
 // Основной API роутер
 app.use('/api', apiRouter);

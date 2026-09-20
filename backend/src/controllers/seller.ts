@@ -2,6 +2,7 @@ import { Response } from 'express';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { botManager } from '../bot/manager.js';
 import { SellerRequest } from '../types/index.js';
+import { uploadBase64Image, resolvePhotoUrl } from '../utils/storage.js';
 
 const ALLOWED_STATUS_TRANSITIONS: Record<string, string[]> = {
   new: ['processing', 'cancelled'], processing: ['ready', 'delivering', 'cancelled'],
@@ -29,12 +30,10 @@ export async function uploadStoreQrCode(req: SellerRequest, res: Response): Prom
     const store = req.store!;
     const { base64_image } = req.body;
     if (!base64_image) return void res.status(400).json({ error: 'Отсутствует изображение' });
-    const matches = base64_image.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) return void res.status(400).json({ error: 'Неверный формат' });
-    const buffer = Buffer.from(matches[2], 'base64');
-    const filePath = `store_${store.id}/qr_${Date.now()}.${matches[1].split('/')[1] || 'png'}`;
-    await supabaseAdmin.storage.from('stores').upload(filePath, buffer, { contentType: matches[1], upsert: true });
-    const publicUrl = supabaseAdmin.storage.from('stores').getPublicUrl(filePath).data.publicUrl;
+
+    const publicUrl = await uploadBase64Image(base64_image, `store_${store.id}`);
+    if (!publicUrl) return void res.status(400).json({ error: 'Неверный формат' });
+
     await req.scopedSupabase!.from('stores').update({ payment_info: { ...(store.payment_info || {}), qr_code_url: publicUrl } }).eq('id', store.id);
     res.json({ qr_code_url: publicUrl });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
@@ -72,16 +71,64 @@ export async function updateOrderStatus(req: SellerRequest, res: Response): Prom
     const { orderId } = req.params;
     const { status: nextStatus } = req.body;
     const store = req.store!;
-    const { data: order } = await supabaseAdmin.from('orders').select('id, status, customers(telegram_id)').eq('id', orderId).eq('store_id', store.id).single();
-    if (!order) return void res.status(404).json({ error: 'Заказ не найден' });
+
+    if (!nextStatus) {
+      res.status(400).json({ error: 'Не указан новый статус' });
+      return;
+    }
+
+    const { data: order } = await supabaseAdmin
+      .from('orders')
+      .select('id, status, customers(telegram_id)')
+      .eq('id', orderId)
+      .eq('store_id', store.id)
+      .single();
+
+    if (!order) {
+      res.status(404).json({ error: 'Заказ не найден' });
+      return;
+    }
+
+    // Валидация перехода статусов
+    const currentStatus = order.status as string;
+    const allowedNext = ALLOWED_STATUS_TRANSITIONS[currentStatus];
+
+    if (!allowedNext) {
+      res.status(400).json({
+        error: `Заказ в статусе «${currentStatus}» не может быть изменён`,
+      });
+      return;
+    }
+
+    if (!allowedNext.includes(nextStatus)) {
+      res.status(400).json({
+        error: `Нельзя перевести заказ из «${currentStatus}» в «${nextStatus}». Доступные: ${allowedNext.join(', ')}`,
+      });
+      return;
+    }
+
     await supabaseAdmin.from('orders').update({ status: nextStatus }).eq('id', orderId);
+
     const customerTgId = (order.customers as any)?.telegram_id;
     if (customerTgId) {
-      const msgs: any = { processing: '📦 Заказ собирается.', ready: '✨ Заказ готов.', delivering: '🚚 Курьер в пути!', completed: '✅ Заказ завершён. Оцените покупку!', cancelled: '❌ Заказ отменён.' };
-      await botManager.notifyCustomer(store.id, Number(customerTgId), `<b>Заказ #${order.id.slice(0, 8).toUpperCase()}</b>\n\n${msgs[nextStatus] || ''}`);
+      const msgs: Record<string, string> = {
+        processing: '📦 Заказ собирается.',
+        ready: '✨ Заказ готов.',
+        delivering: '🚚 Курьер в пути!',
+        completed: '✅ Заказ завершён. Оцените покупку!',
+        cancelled: '❌ Заказ отменён.',
+      };
+      await botManager.notifyCustomer(
+        store.id,
+        Number(customerTgId),
+        `<b>Заказ #${order.id.slice(0, 8).toUpperCase()}</b>\n\n${msgs[nextStatus] || ''}`
+      );
     }
+
     res.json({ message: 'Ок', status: nextStatus });
-  } catch (err) { res.status(500).json({ error: 'Ошибка' }); }
+  } catch (err) {
+    res.status(500).json({ error: 'Ошибка' });
+  }
 }
 
 export async function getSellerCatalog(req: SellerRequest, res: Response): Promise<void> {
@@ -114,17 +161,9 @@ export async function createCustomProduct(req: SellerRequest, res: Response): Pr
   try {
     const store = req.store!;
     const { name, category_id, photo_url, price, base64_image } = req.body;
-    let finalPhotoUrl = photo_url || null;
-    if (base64_image) {
-      const matches = base64_image.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
-      if (matches && matches.length === 3) {
-        const buffer = Buffer.from(matches[2], 'base64');
-        const ext = matches[1].split('/')[1] || 'png';
-        const filePath = `products/custom_${Date.now()}.${ext}`;
-        await supabaseAdmin.storage.from('stores').upload(filePath, buffer, { contentType: matches[1], upsert: true });
-        finalPhotoUrl = supabaseAdmin.storage.from('stores').getPublicUrl(filePath).data.publicUrl;
-      }
-    }
+
+    const finalPhotoUrl = await resolvePhotoUrl(base64_image, photo_url, 'products');
+
     const { data: gp } = await supabaseAdmin.from('global_products').insert({ name: name.trim(), category_id, photo_url: finalPhotoUrl, unit: 'шт' }).select('id').single();
     await req.scopedSupabase!.from('store_products').insert({ store_id: store.id, global_product_id: gp!.id, custom_price: price || 0, is_active: true });
     res.status(201).json({ success: true });
