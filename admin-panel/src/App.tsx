@@ -1,4 +1,3 @@
-import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './store/auth';
 import AdminProtectedRoute from './components/AdminProtectedRoute';
@@ -9,18 +8,12 @@ import StoresPage from './pages/Stores';
 import GlobalCatalogPage from './pages/GlobalCatalog';
 
 export default function App() {
-  const initialize = useAuthStore((s) => s.initialize);
-  const session = useAuthStore((s) => s.session);
-
-  useEffect(() => {
-    const unsubscribe = initialize();
-    return unsubscribe;
-  }, [initialize]);
+  const user = useAuthStore((s) => s.user);
 
   return (
     <BrowserRouter>
       <Routes>
-        <Route path="/login" element={session ? <Navigate to="/" replace /> : <LoginPage />} />
+        <Route path="/login" element={user ? <Navigate to="/" replace /> : <LoginPage />} />
 
         <Route element={<AdminProtectedRoute />}>
           <Route element={<Layout />}>
@@ -34,4 +27,4 @@ export default function App() {
       </Routes>
     </BrowserRouter>
   );
-}
+}
