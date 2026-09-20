@@ -1,6 +1,19 @@
-import { supabase } from '../lib/supabase';
+/// <reference types="vite/client" />
 
-const API_BASE = ((import.meta as any).env?.VITE_API_URL as string | undefined) ?? '';
+const API_BASE = import.meta.env.VITE_API_URL || '';
+
+/**
+ * Получаем initData из Telegram WebApp.
+ * Если TMA недоступно (десктоп, dev-режим) — вернём пустую строку,
+ * и бэкенд ответит 401.
+ */
+function getTmaInitData(): string {
+  try {
+    return window.Telegram?.WebApp?.initData || '';
+  } catch {
+    return '';
+  }
+}
 
 interface ApiOptions {
   method?: 'GET' | 'POST' | 'PATCH' | 'PUT' | 'DELETE';
@@ -9,22 +22,16 @@ interface ApiOptions {
 
 /**
  * Клиент API для панели продавца.
- * Автоматически запрашивает актуальный JWT из сессии Supabase перед каждым запросом.
+ * Авторизация через Telegram Mini App initData (заголовок: Authorization: tma <initData>).
  */
 export async function api<T>(endpoint: string, options: ApiOptions = {}): Promise<T> {
   const { method = 'GET', body } = options;
 
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session) {
-    throw new Error('Требуется авторизация');
-  }
+  const initData = getTmaInitData();
 
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
-    Authorization: `Bearer ${session.access_token}`,
+    Authorization: `tma ${initData}`,
   };
 
   const res = await fetch(`${API_BASE}${endpoint}`, {
@@ -36,7 +43,9 @@ export async function api<T>(endpoint: string, options: ApiOptions = {}): Promis
   const data = await res.json();
 
   if (!res.ok) {
-    throw new Error(data.error || `Ошибка сервера: ${res.status}`);
+    const err = new Error(data.error || `Ошибка сервера: ${res.status}`);
+    (err as any).status = res.status;
+    throw err;
   }
 
   return data as T;

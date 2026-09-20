@@ -1,11 +1,9 @@
 import { NavLink, Outlet } from 'react-router-dom';
-import { useAuthStore } from '../store/auth';
 import { useUIStore } from '../store/ui';
 import {
   ClipboardList,
   Package,
   Settings,
-  LogOut,
   Store,
   X,
   CheckCircle2,
@@ -20,8 +18,8 @@ const NAV_ITEMS = [
 ] as const;
 
 export default function Layout() {
-  const signOut = useAuthStore((s) => s.signOut);
-  const user = useAuthStore((s) => s.user);
+  const tgUser = window.Telegram?.WebApp?.initDataUnsafe?.user;
+  const displayName = tgUser?.first_name || 'Продавец';
   const toasts = useUIStore((s) => s.toasts);
   const removeToast = useUIStore((s) => s.removeToast);
 
@@ -36,7 +34,7 @@ export default function Layout() {
           <div>
             <p className="font-bold text-sm">Appkel</p>
             <p className="text-xs text-slate-400 truncate max-w-[160px]">
-              {user?.email}
+              {displayName}
             </p>
           </div>
         </div>
@@ -61,15 +59,7 @@ export default function Layout() {
           ))}
         </nav>
 
-        <div className="px-3 pb-4">
-          <button
-            onClick={signOut}
-            className="flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium text-slate-400 hover:bg-white/10 hover:text-white transition-colors w-full"
-          >
-            <LogOut className="w-5 h-5" />
-            Выйти
-          </button>
-        </div>
+
       </aside>
 
       {/* Основная рабочая область */}
@@ -82,12 +72,6 @@ export default function Layout() {
             </div>
             <span className="font-black text-base text-slate-900">Appkel</span>
           </div>
-          <button
-            onClick={signOut}
-            className="text-slate-400 hover:text-slate-900 p-1 transition-colors"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
         </header>
 
         {/* Контент активной страницы */}

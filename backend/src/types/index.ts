@@ -35,11 +35,11 @@ export interface BuyerRequest extends Request {
   storeId?: string;
 }
 
-// Request от продавца (авторизация через Supabase JWT)
+// Request от продавца (авторизация через Telegram initData)
 export interface SellerRequest extends Request {
-  user?: User;
+  telegram_id?: number;
   store?: Store;
-  scopedSupabase?: SupabaseClient; // клиент с RLS продавца
+  scopedSupabase?: SupabaseClient; // оставляем для обратной совместимости контроллеров
 }
 
 // Request от суперадмина

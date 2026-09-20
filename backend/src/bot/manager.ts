@@ -2,8 +2,18 @@ import { Bot, InlineKeyboard, Keyboard } from 'grammy';
 import { supabaseAdmin } from '../lib/supabase.js';
 import { config } from '../config/env.js';
 
-// Хранилище для процесса привязки магазина: telegram_id -> store_id
-const pendingSetups = new Map<number, string>();
+/**
+ * Состояния онбординга продавца.
+ * contact_pending  — бот запросил контакт, ждём телефон
+ * location_pending — контакт получен, ждём геолокацию
+ */
+interface PendingSetup {
+  storeId: string;
+  stage: 'contact_pending' | 'location_pending';
+  phone?: string;
+}
+
+const pendingSetups = new Map<number, PendingSetup>();
 
 class BotManager {
   private mainBot: Bot | null = null;
@@ -19,15 +29,15 @@ class BotManager {
     this.mainBot = new Bot(token);
     const bot = this.mainBot;
 
+    // ===================== /start =====================
     bot.command('start', async (ctx) => {
       if (!ctx.from) return;
       const payload = ctx.match;
 
-      // СЦЕНАРИЙ 1: Регистрация продавца (setup_ID)
+      // СЦЕНАРИЙ 1: Регистрация продавца (/start setup_<store_id>)
       if (payload.startsWith('setup_')) {
         const storeId = payload.replace('setup_', '');
 
-        // Проверяем, что магазин существует
         const { data: store } = await supabaseAdmin
           .from('stores')
           .select('id, name')
@@ -39,10 +49,13 @@ class BotManager {
           return;
         }
 
-        // Сохраняем связку в Map (безопасно — только через deeplink)
-        pendingSetups.set(ctx.from.id, storeId);
-        
-        const reqKeyboard = new Keyboard()
+        // Сохраняем стейт: ждём контакт
+        pendingSetups.set(ctx.from.id, {
+          storeId,
+          stage: 'contact_pending',
+        });
+
+        const kb = new Keyboard()
           .requestContact('📱 Подтвердить номер продавца')
           .resized()
           .oneTime();
@@ -50,13 +63,13 @@ class BotManager {
         await ctx.reply(
           `<b>Приветствуем партнера Appkel!</b> 🏪\n\n` +
           `Магазин: <b>«${store.name}»</b>\n\n` +
-          `Чтобы привязать этот аккаунт Telegram для получения уведомлений о заказах, нажмите кнопку ниже:`,
-          { reply_markup: reqKeyboard, parse_mode: 'HTML' }
+          `<b>Шаг 1 из 2:</b> Нажмите кнопку ниже, чтобы подтвердить номер телефона.`,
+          { reply_markup: kb, parse_mode: 'HTML' }
         );
         return;
       }
 
-      // СЦЕНАРИЙ 2: Вход по QR магазина (store_ID)
+      // СЦЕНАРИЙ 2: Покупатель входит по QR магазина (/start store_<id>)
       if (payload.startsWith('store_')) {
         const storeId = payload.replace('store_', '');
         const { data: store } = await supabaseAdmin
@@ -70,18 +83,18 @@ class BotManager {
           : 'Магазин найден!';
 
         const kb = new InlineKeyboard().webApp(
-          `🛍 Открыть магазин`,
+          '🛍 Открыть магазин',
           `${config.tma.buyerUrl}?store_id=${storeId}`
         );
-        await ctx.reply(msg + `\nНажмите кнопку ниже:`, {
+        await ctx.reply(msg + '\nНажмите кнопку ниже:', {
           reply_markup: kb,
           parse_mode: 'HTML',
         });
         return;
       }
 
-      // СЦЕНАРИЙ 3: Обычный покупатель
-      const requestKeyboard = new Keyboard()
+      // СЦЕНАРИЙ 3: Обычный покупатель (без payload)
+      const kb = new Keyboard()
         .requestContact('📱 Поделиться номером')
         .row()
         .requestLocation('📍 Поделиться локацией')
@@ -89,43 +102,35 @@ class BotManager {
         .oneTime();
 
       await ctx.reply(
-        `Здравствуйте! 👋\nДобро пожаловать в маркетплейс Appkel.\n\nПоделитесь контактом и локацией, чтобы мы подобрали ближайшие магазины.`,
-        { reply_markup: requestKeyboard }
+        'Здравствуйте! 👋\nДобро пожаловать в маркетплейс Appkel.\n\nПоделитесь контактом и локацией, чтобы мы подобрали ближайшие магазины.',
+        { reply_markup: kb }
       );
     });
 
+    // ===================== Контакт =====================
     bot.on('message:contact', async (ctx) => {
       if (!ctx.from) return;
       const contact = ctx.message.contact;
       if (contact.user_id !== ctx.from.id) return;
 
-      // Проверяем, есть ли ожидающая привязка магазина для этого продавца
-      const pendingStoreId = pendingSetups.get(ctx.from.id);
+      const pending = pendingSetups.get(ctx.from.id);
 
-      if (pendingStoreId) {
-        // --- СЦЕНАРИЙ ПРОДАВЦА: привязка магазина ---
-        const { error: updateError } = await supabaseAdmin
-          .from('stores')
-          .update({ owner_chat_id: ctx.from.id })
-          .eq('id', pendingStoreId);
+      // --- СЦЕНАРИЙ ПРОДАВЦА: контакт получен, запрашиваем локацию ---
+      if (pending && pending.stage === 'contact_pending') {
+        // Переводим в следующий стейт
+        pending.phone = contact.phone_number;
+        pending.stage = 'location_pending';
+        pendingSetups.set(ctx.from.id, pending);
 
-        if (updateError) {
-          await ctx.reply('❌ Ошибка привязки магазина. Попробуйте ещё раз или обратитесь к администратору.');
-          return;
-        }
-
-        // Удаляем из очереди — привязка завершена
-        pendingSetups.delete(ctx.from.id);
-
-        const sellerUrl = config.tma.sellerUrl;
-        const kb = new InlineKeyboard().webApp(`⚙️ Управление магазином`, sellerUrl);
+        const kb = new Keyboard()
+          .requestLocation('📍 Отправить геолокацию магазина')
+          .resized()
+          .oneTime();
 
         await ctx.reply(
-          `✅ Магазин успешно привязан к вашему аккаунту Telegram!\n` +
-          `Телефон: ${contact.phone_number}\n\n` +
-          `Теперь вы будете получать сюда чеки заказов.\n` +
-          `Отправьте геолокацию вашего магазина для настройки доставки.`,
-          { reply_markup: kb }
+          `✅ Телефон подтверждён: ${contact.phone_number}\n\n` +
+          `<b>Шаг 2 из 2:</b> Теперь отправьте геолокацию вашего магазина для настройки зоны доставки.`,
+          { reply_markup: kb, parse_mode: 'HTML' }
         );
         return;
       }
@@ -143,10 +148,48 @@ class BotManager {
       );
     });
 
+    // ===================== Локация =====================
     bot.on('message:location', async (ctx) => {
       if (!ctx.from) return;
       const loc = ctx.message.location;
+      const pending = pendingSetups.get(ctx.from.id);
 
+      // --- СЦЕНАРИЙ ПРОДАВЦА: локация получена, завершаем привязку ---
+      if (pending && pending.stage === 'location_pending') {
+        const { error: updateError } = await supabaseAdmin
+          .from('stores')
+          .update({
+            owner_chat_id: ctx.from.id,
+            latitude: loc.latitude,
+            longitude: loc.longitude,
+          })
+          .eq('id', pending.storeId);
+
+        if (updateError) {
+          await ctx.reply('❌ Ошибка привязки магазина. Попробуйте ещё раз.');
+          return;
+        }
+
+        // Очищаем стейт — онбординг завершён
+        pendingSetups.delete(ctx.from.id);
+
+        const kb = new InlineKeyboard().webApp(
+          '⚙️ Управление магазином',
+          config.tma.sellerUrl
+        );
+
+        await ctx.reply(
+          '✅ <b>Магазин успешно настроен!</b>\n\n' +
+          `📱 Телефон: ${pending.phone}\n` +
+          `📍 Координаты сохранены\n\n` +
+          'Теперь вы будете получать уведомления о заказах прямо сюда.\n' +
+          'Нажмите кнопку ниже, чтобы открыть панель управления:',
+          { reply_markup: kb, parse_mode: 'HTML' }
+        );
+        return;
+      }
+
+      // --- СЦЕНАРИЙ ПОКУПАТЕЛЯ / ОБНОВЛЕНИЕ ЛОКАЦИИ ВЛАДЕЛЬЦА ---
       // Проверяем, является ли отправитель владельцем магазина
       const { data: store } = await supabaseAdmin
         .from('stores')
@@ -160,12 +203,13 @@ class BotManager {
           .update({ latitude: loc.latitude, longitude: loc.longitude })
           .eq('id', store.id);
 
-        await ctx.reply('✅ Координаты вашего магазина успешно сохранены!', {
+        await ctx.reply('✅ Координаты вашего магазина обновлены!', {
           reply_markup: { remove_keyboard: true },
         });
+        return;
       }
 
-      // Сохраняем локацию покупателя в любом случае
+      // Обычный покупатель — сохраняем его локацию
       await supabaseAdmin.from('buyers').upsert({
         telegram_id: ctx.from.id.toString(),
         latitude: loc.latitude,
@@ -174,16 +218,15 @@ class BotManager {
         username: ctx.from.username,
       });
 
-      if (!store) {
-        await ctx.reply('✅ Локация сохранена!', {
-          reply_markup: { remove_keyboard: true },
-        });
-        const kb = new InlineKeyboard().webApp(
-          `🛍 Открыть маркетплейс`,
-          config.tma.buyerUrl
-        );
-        await ctx.reply('Вход в приложение:', { reply_markup: kb });
-      }
+      await ctx.reply('✅ Локация сохранена!', {
+        reply_markup: { remove_keyboard: true },
+      });
+
+      const buyerKb = new InlineKeyboard().webApp(
+        '🛍 Открыть маркетплейс',
+        config.tma.buyerUrl
+      );
+      await ctx.reply('Вход в приложение:', { reply_markup: buyerKb });
     });
 
     bot.start({

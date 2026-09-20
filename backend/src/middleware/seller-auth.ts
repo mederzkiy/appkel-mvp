@@ -1,10 +1,19 @@
 import { Response, NextFunction } from 'express';
-import { supabaseAdmin, createUserClient } from '../lib/supabase.js';
+import crypto from 'crypto';
+import { supabaseAdmin } from '../lib/supabase.js';
 import { SellerRequest } from '../types/index.js';
 
 /**
- * Валидация сессии продавца по Supabase JWT (Bearer токен).
- * Проверяет роль 'seller' и права на управление своим магазином.
+ * Middleware авторизации продавца через Telegram Mini App initData.
+ *
+ * Протокол:
+ *   Authorization: tma <initData>
+ *
+ * 1. Валидирует HMAC подпись через единый токен бота
+ * 2. Проверяет auth_date (не старше 24 часов)
+ * 3. Извлекает telegram_id из user data
+ * 4. Ищет магазин с owner_chat_id == telegram_id и status == 'active'
+ * 5. Если найден — кладёт store в req и пропускает
  */
 export async function requireSellerAuth(
   req: SellerRequest,
@@ -13,53 +22,95 @@ export async function requireSellerAuth(
 ): Promise<void> {
   try {
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      res.status(401).json({ error: 'Требуется авторизация Bearer токеном' });
+
+    if (!authHeader || !authHeader.startsWith('tma ')) {
+      res.status(401).json({ error: 'Требуется авторизация Telegram Mini App (Authorization: tma <initData>)' });
       return;
     }
 
-    const token = authHeader.slice(7);
-
-    // Проверяем валидность токена через Supabase Auth
-    const { data: { user }, error: userError } = await supabaseAdmin.auth.getUser(token);
-
-    if (userError || !user) {
-      res.status(401).json({ error: 'Недействительный или просроченный токен' });
+    const botToken = process.env.TELEGRAM_BOT_TOKEN;
+    if (!botToken) {
+      res.status(500).json({ error: 'Токен бота не настроен на сервере' });
       return;
     }
 
-    // Проверяем роль в profiles
-    const { data: profile, error: profileErr } = await supabaseAdmin
-      .from('profiles')
-      .select('role')
-      .eq('id', user.id)
-      .single();
+    const initDataRaw = authHeader.slice(4);
+    const urlParams = new URLSearchParams(initDataRaw);
+    const hash = urlParams.get('hash');
 
-    if (profileErr || (profile?.role !== 'seller' && profile?.role !== 'super_admin')) {
-      res.status(403).json({ error: 'Доступ запрещён: требуется роль продавца' });
+    if (!hash) {
+      res.status(401).json({ error: 'Параметр hash отсутствует в initData' });
       return;
     }
 
-    // Находим магазин, принадлежащий этому пользователю
+    // Формируем data_check_string
+    urlParams.delete('hash');
+    const paramsArray: string[] = [];
+    urlParams.forEach((val, key) => paramsArray.push(`${key}=${val}`));
+    paramsArray.sort();
+    const dataCheckString = paramsArray.join('\n');
+
+    // HMAC_SHA256(data_check_string, HMAC_SHA256("WebAppData", bot_token))
+    const secretKey = crypto
+      .createHmac('sha256', 'WebAppData')
+      .update(botToken)
+      .digest();
+
+    const calculatedHash = crypto
+      .createHmac('sha256', secretKey)
+      .update(dataCheckString)
+      .digest('hex');
+
+    if (calculatedHash !== hash) {
+      res.status(401).json({ error: 'Подпись Telegram initData недействительна' });
+      return;
+    }
+
+    // Проверяем срок годности (auth_date не старше 24 часов)
+    const authDate = parseInt(urlParams.get('auth_date') || '0', 10);
+    const now = Math.floor(Date.now() / 1000);
+    if (now - authDate > 86400) {
+      res.status(401).json({ error: 'Срок действия сессии Telegram истёк (более 24 часов)' });
+      return;
+    }
+
+    // Извлекаем telegram_id из user данных
+    const userRaw = urlParams.get('user');
+    if (!userRaw) {
+      res.status(400).json({ error: 'Данные пользователя отсутствуют в initData' });
+      return;
+    }
+
+    const tgUser = JSON.parse(userRaw);
+    const telegramId = Number(tgUser.id);
+
+    if (!telegramId) {
+      res.status(400).json({ error: 'Не удалось определить Telegram ID' });
+      return;
+    }
+
+    // Ищем магазин, привязанный к этому Telegram аккаунту
     const { data: store, error: storeErr } = await supabaseAdmin
       .from('stores')
       .select('*')
-      .eq('owner_id', user.id)
+      .eq('owner_chat_id', telegramId)
+      .eq('status', 'active')
       .single();
 
     if (storeErr || !store) {
-      res.status(404).json({ error: 'Магазин, привязанный к вашему аккаунту, не найден' });
+      res.status(403).json({
+        error: 'Магазин не найден. Убедитесь, что вы прошли регистрацию через бот.',
+      });
       return;
     }
 
-    // Инжектируем данные и клиент со скоупом пользователя (для соблюдения RLS)
-    req.user = user;
+    // Инжектируем данные в запрос
+    req.telegram_id = telegramId;
     req.store = store;
-    req.scopedSupabase = createUserClient(token);
 
     next();
   } catch (err) {
-    console.error('[Seller Auth Middleware Error]:', err);
+    console.error('[Seller TMA Auth Error]:', err);
     res.status(500).json({ error: 'Ошибка верификации сессии продавца' });
   }
 }

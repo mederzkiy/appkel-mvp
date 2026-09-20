@@ -17,7 +17,7 @@ export async function updateSellerStore(req: SellerRequest, res: Response): Prom
   try {
     const store = req.store!;
     const { name, address, delivery_radius_km, delivery_base_fee, delivery_per_km_fee, free_delivery_threshold, payment_info, owner_chat_id } = req.body;
-    const { data: updated, error } = await req.scopedSupabase!.from('stores')
+    const { data: updated, error } = await supabaseAdmin.from('stores')
       .update({ name, address, delivery_radius_km, delivery_base_fee, delivery_per_km_fee, free_delivery_threshold: free_delivery_threshold !== undefined ? Number(free_delivery_threshold) : 0, payment_info, owner_chat_id: owner_chat_id ? parseInt(owner_chat_id, 10) : null })
       .eq('id', store.id).select('*').single();
     if (error) return void res.status(400).json({ error: error.message });
@@ -34,7 +34,7 @@ export async function uploadStoreQrCode(req: SellerRequest, res: Response): Prom
     const publicUrl = await uploadBase64Image(base64_image, `store_${store.id}`);
     if (!publicUrl) return void res.status(400).json({ error: 'Неверный формат' });
 
-    await req.scopedSupabase!.from('stores').update({ payment_info: { ...(store.payment_info || {}), qr_code_url: publicUrl } }).eq('id', store.id);
+    await supabaseAdmin.from('stores').update({ payment_info: { ...(store.payment_info || {}), qr_code_url: publicUrl } }).eq('id', store.id);
     res.json({ qr_code_url: publicUrl });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 }
@@ -47,7 +47,7 @@ export async function getStoreStats(req: SellerRequest, res: Response): Promise<
     if (period === 'today') dateFilter.setHours(0, 0, 0, 0);
     else if (period === '7d') dateFilter.setDate(dateFilter.getDate() - 7);
     else if (period === '30d') dateFilter.setDate(dateFilter.getDate() - 30);
-    const { data: orders } = await req.scopedSupabase!.from('orders').select('total_amount, delivery_type, status').eq('store_id', store.id).gte('created_at', dateFilter.toISOString());
+    const { data: orders } = await supabaseAdmin.from('orders').select('total_amount, delivery_type, status').eq('store_id', store.id).gte('created_at', dateFilter.toISOString());
     const completed = (orders || []).filter((o) => o.status === 'completed');
     res.json({ total_orders: (orders || []).length, total_revenue: completed.reduce((sum, o) => sum + Number(o.total_amount), 0), deliveries_count: (orders || []).filter((o) => o.delivery_type === 'delivery').length, completed_orders: completed.length });
   } catch (err) { res.status(500).json({ error: 'Ошибка статистики' }); }
@@ -57,7 +57,7 @@ export async function getSellerOrders(req: SellerRequest, res: Response): Promis
   try {
     const store = req.store!;
     const status = req.query.status as string;
-    let query = req.scopedSupabase!.from('orders').select(`*, customers(first_name, last_name, username, phone), order_items(*)`).eq('store_id', store.id).order('created_at', { ascending: false });
+    let query = supabaseAdmin.from('orders').select(`*, customers(first_name, last_name, username, phone), order_items(*)`).eq('store_id', store.id).order('created_at', { ascending: false });
     if (status === 'active') query = query.in('status', ['new', 'processing', 'ready', 'delivering']);
     else if (status === 'completed') query = query.in('status', ['completed', 'cancelled']);
     else if (status) query = query.eq('status', status);
@@ -135,7 +135,7 @@ export async function getSellerCatalog(req: SellerRequest, res: Response): Promi
   try {
     const store = req.store!;
     const { data: globalProducts } = await supabaseAdmin.from('global_products').select(`*, categories(id, name)`).order('name');
-    const { data: storeProducts } = await req.scopedSupabase!.from('store_products').select('*').eq('store_id', store.id);
+    const { data: storeProducts } = await supabaseAdmin.from('store_products').select('*').eq('store_id', store.id);
     const storeProdMap = new Map<string, any>();
     (storeProducts || []).forEach((sp) => storeProdMap.set(sp.global_product_id, sp));
     const catalog = (globalProducts || []).map((gp: any) => {
@@ -151,7 +151,7 @@ export async function toggleSellerCatalogItem(req: SellerRequest, res: Response)
     const store = req.store!;
     const { global_product_id, custom_price, old_price, is_active } = req.body;
     const finalOldPrice = old_price === null || old_price === '' || isNaN(old_price) ? null : Number(old_price);
-    const { data, error } = await req.scopedSupabase!.from('store_products').upsert({ store_id: store.id, global_product_id, custom_price: custom_price || 0, old_price: finalOldPrice, is_active: Boolean(is_active) }, { onConflict: 'store_id,global_product_id' }).select('*').single();
+    const { data, error } = await supabaseAdmin.from('store_products').upsert({ store_id: store.id, global_product_id, custom_price: custom_price || 0, old_price: finalOldPrice, is_active: Boolean(is_active) }, { onConflict: 'store_id,global_product_id' }).select('*').single();
     if (error) return void res.status(400).json({ error: error.message });
     res.json({ success: true, item: data });
   } catch (err) { res.status(500).json({ error: 'Ошибка сохранения' }); }
@@ -165,7 +165,7 @@ export async function createCustomProduct(req: SellerRequest, res: Response): Pr
     const finalPhotoUrl = await resolvePhotoUrl(base64_image, photo_url, 'products');
 
     const { data: gp } = await supabaseAdmin.from('global_products').insert({ name: name.trim(), category_id, photo_url: finalPhotoUrl, unit: 'шт' }).select('id').single();
-    await req.scopedSupabase!.from('store_products').insert({ store_id: store.id, global_product_id: gp!.id, custom_price: price || 0, is_active: true });
+    await supabaseAdmin.from('store_products').insert({ store_id: store.id, global_product_id: gp!.id, custom_price: price || 0, is_active: true });
     res.status(201).json({ success: true });
   } catch (err) { res.status(500).json({ error: 'Ошибка создания кастомного товара' }); }
 }
