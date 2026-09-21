@@ -1,0 +1,22 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.adminRouter = void 0;
+const express_1 = require("express");
+const admin_auth_js_1 = require("../middleware/admin-auth.js");
+const admin_js_1 = require("../controllers/admin.js");
+const router = (0, express_1.Router)();
+router.use(admin_auth_js_1.requireSuperAdminAuth);
+router.get('/metrics', admin_js_1.getPlatformMetrics);
+router.get('/users', admin_js_1.getUsersList);
+router.get('/stores', admin_js_1.getStoresList);
+router.post('/stores', admin_js_1.createStore);
+router.patch('/stores/:id', admin_js_1.updateStoreByAdmin);
+router.post('/stores/:id/delete', admin_js_1.deleteStore); // Используем POST для удаления, чтобы не конфликтовать со старым клиентом
+router.get('/global-products', admin_js_1.getGlobalProducts);
+router.post('/global-products', admin_js_1.createGlobalProduct);
+router.patch('/global-products/:id', admin_js_1.updateGlobalProduct);
+router.delete('/global-products/:id', admin_js_1.deleteGlobalProduct);
+router.post('/global-products/:id/make-global', admin_js_1.makeProductGlobal);
+router.get('/categories', admin_js_1.getCategoriesList);
+router.post('/categories', admin_js_1.createCategory);
+exports.adminRouter = router;

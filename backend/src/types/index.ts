@@ -26,6 +26,8 @@ export interface Store {
     instructions?: string;
   };
   subscription_expires_at: string | null;
+  latitude?: number;
+  longitude?: number;
 }
 
 // Request от покупателя (авторизация через Telegram initData)
