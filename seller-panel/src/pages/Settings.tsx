@@ -38,14 +38,15 @@ export default function SettingsPage() {
       try {
         const data = await apiGet<{ store: StoreData }>('/api/seller/store');
         const s = data.store;
+        const pInfo = typeof s.payment_info === 'string' ? JSON.parse(s.payment_info) : (s.payment_info || {});
         setName(s.name || '');
         setAddress(s.address || '');
         setRadiusKm(s.delivery_radius_km?.toString() || '1');
         setBaseFee(s.delivery_base_fee?.toString() || '0');
         setPerKmFee(s.delivery_per_km_fee?.toString() || '0');
         setFreeThreshold(s.free_delivery_threshold?.toString() || '0');
-        setMbankPhone(s.payment_info?.mbank_phone || '');
-        setQrCodeUrl(s.payment_info?.qr_code_url || '');
+        setMbankPhone(pInfo.mbank_phone || '');
+        setQrCodeUrl(pInfo.qr_code_url || '');
         setOwnerChatId(s.owner_chat_id?.toString() || '');
       } catch (err) {
         addToast(err instanceof Error ? err.message : 'Ошибка загрузки настроек', 'error');

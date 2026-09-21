@@ -280,7 +280,8 @@ function EditStoreModal({ store, onClose, onSaved }: { store: StoreRow; onClose:
   const [radius, setRadius] = useState(store.delivery_radius_km?.toString() || '1');
   const [baseFee, setBaseFee] = useState(store.delivery_base_fee?.toString() || '0');
   const [perKmFee, setPerKmFee] = useState(store.delivery_per_km_fee?.toString() || '0');
-  const [mbankPhone, setMbankPhone] = useState(store.payment_info?.mbank_phone || '');
+  const pInfo = typeof store.payment_info === 'string' ? JSON.parse(store.payment_info) : (store.payment_info || {});
+  const [mbankPhone, setMbankPhone] = useState(pInfo.mbank_phone || '');
   const [expiresAt, setExpiresAt] = useState(store.subscription_expires_at ? store.subscription_expires_at.slice(0, 10) : '');
   const [saving, setSaving] = useState(false);
   const addToast = useUIStore((s: any) => s.addToast);
@@ -296,7 +297,7 @@ function EditStoreModal({ store, onClose, onSaved }: { store: StoreRow; onClose:
         delivery_radius_km: radius ? parseFloat(radius) : 1,
         delivery_base_fee: baseFee ? parseFloat(baseFee) : 0,
         delivery_per_km_fee: perKmFee ? parseFloat(perKmFee) : 0,
-        payment_info: { ...store.payment_info, mbank_phone: mbankPhone }
+        payment_info: { ...pInfo, mbank_phone: mbankPhone }
       });
       addToast(`Магазин обновлён`, 'success');
       onSaved();
