@@ -363,42 +363,29 @@ export default function SettingsPage() {
 
 function StoreQrModal({ storeId, storeName, onClose }: { storeId: string; storeName: string; onClose: () => void }) {
   const botUsername = 'appkelbot';
-  const sellerLink = `https://t.me/${botUsername}?start=setup_${storeId}`;
   const buyerLink = `https://t.me/${botUsername}?start=store_${storeId}`;
-  
-  const sellerQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(sellerLink)}`;
   const buyerQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(buyerLink)}`;
 
-  const [activeTab, setActiveTab] = useState<'buyer' | 'seller'>('buyer');
-
   const handlePrint = () => window.print();
-
-  const currentLink = activeTab === 'buyer' ? buyerLink : sellerLink;
-  const currentQr = activeTab === 'buyer' ? buyerQrUrl : sellerQrUrl;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-black text-slate-900">QR-коды магазина</h2>
+          <h2 className="text-base font-black text-slate-900">QR-код витрины</h2>
           <button type="button" onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-400" /></button>
-        </div>
-        
-        <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
-          <button type="button" onClick={() => setActiveTab('buyer')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${activeTab === 'buyer' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Для клиентов</button>
-          <button type="button" onClick={() => setActiveTab('seller')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${activeTab === 'seller' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Для продавца</button>
         </div>
 
         <div className="p-4 bg-slate-50 border border-slate-200 rounded-3xl inline-block">
-          <img src={currentQr} alt="QR Code" className="w-48 h-48 mx-auto rounded-xl shadow-sm" />
+          <img src={buyerQrUrl} alt="QR Code" className="w-48 h-48 mx-auto rounded-xl shadow-sm" />
           <p className="mt-3 text-xs font-black text-slate-900">{storeName || 'Магазин'}</p>
-          <p className="text-[10px] text-slate-400">{activeTab === 'buyer' ? 'Отсканируйте для входа в магазин' : 'Сканировать для привязки магазина'}</p>
+          <p className="text-[10px] text-slate-400">Отсканируйте для входа в магазин</p>
         </div>
         <div className="text-[11px] font-mono bg-slate-100 p-2.5 rounded-xl text-slate-600 break-all select-all border border-slate-200">
-          {currentLink}
+          {buyerLink}
         </div>
         <div className="flex gap-2">
-          <a href={currentQr} download={`qr_${activeTab}_${storeName}.png`} target="_blank" rel="noreferrer" className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+          <a href={buyerQrUrl} download={`qr_${storeName}.png`} target="_blank" rel="noreferrer" className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
             <Download className="w-4 h-4" /> Скачать
           </a>
           <button type="button" onClick={handlePrint} className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">

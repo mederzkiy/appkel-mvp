@@ -16,6 +16,8 @@ interface GlobalProduct {
   unit: string;
   category_id: string;
   categories?: Category;
+  store_id?: string | null;
+  store_name?: string | null;
 }
 
 export default function GlobalCatalogPage() {
@@ -81,7 +83,31 @@ export default function GlobalCatalogPage() {
     }
   };
 
+  const handleDelete = async (id: string) => {
+    if (!window.confirm('Точно удалить этот товар?')) return;
+    try {
+      await apiPost(`/api/admin/global-products/${id}/delete`, {});
+      addToast('Товар удален', 'success');
+      fetchData();
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка удаления', 'error');
+    }
+  };
+
+  const handleMakeGlobal = async (id: string) => {
+    if (!window.confirm('Сделать товар глобальным? Он станет доступен всем магазинам.')) return;
+    try {
+      await apiPost(`/api/admin/global-products/${id}/make-global`, {});
+      addToast('Товар перенесен в глобальный каталог', 'success');
+      fetchData();
+    } catch (err: any) {
+      addToast(err.message || 'Ошибка', 'error');
+    }
+  };
+
   const filtered = products.filter(p => p.name.toLowerCase().includes(search.toLowerCase()));
+  const adminProducts = filtered.filter(p => !p.store_id);
+  const storeProducts = filtered.filter(p => p.store_id);
 
   if (loading) return <div className="flex justify-center py-20"><Loader2 className="w-8 h-8 animate-spin text-slate-400" /></div>;
 
@@ -108,26 +134,87 @@ export default function GlobalCatalogPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {filtered.map(p => (
-          <div key={p.id} className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex items-center gap-4 transition-all hover:shadow-md">
-            <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center flex-shrink-0 border border-slate-100 overflow-hidden">
-              {p.photo_url ? <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover" /> : <ImageOff className="w-6 h-6 text-slate-300" />}
-            </div>
-            <div className="flex-1 min-w-0">
-              <h3 className="text-sm font-bold text-slate-900 truncate">{p.name}</h3>
-              <p className="text-[11px] text-slate-500 mt-0.5">{p.categories?.name} • {p.unit}</p>
-            </div>
-            <button 
-              onClick={() => setEditItem(p)} 
-              className="p-2.5 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
-              title="Редактировать"
-            >
-              <Edit className="w-4 h-4" />
-            </button>
+      {adminProducts.length > 0 && (
+        <div className="space-y-4">
+          <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">Глобальные (Админ)</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {adminProducts.map(p => (
+              <div key={p.id} className="bg-white p-4 rounded-3xl border border-slate-200 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center flex-shrink-0 border border-slate-100 overflow-hidden">
+                    {p.photo_url ? <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover" /> : <ImageOff className="w-6 h-6 text-slate-300" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-bold text-slate-900 truncate">{p.name}</h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">{p.categories?.name} • {p.unit}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-slate-50">
+                  <button 
+                    onClick={() => setEditItem(p)} 
+                    className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+                    title="Редактировать"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(p.id)} 
+                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                    title="Удалить"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
+
+      {storeProducts.length > 0 && (
+        <div className="space-y-4 mt-8">
+          <h2 className="text-sm font-bold text-slate-400 uppercase tracking-wider">От магазинов</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {storeProducts.map(p => (
+              <div key={p.id} className="bg-white p-4 rounded-3xl border border-amber-200 shadow-sm flex flex-col justify-between transition-all hover:shadow-md">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 bg-slate-50 rounded-2xl flex items-center justify-center flex-shrink-0 border border-slate-100 overflow-hidden">
+                    {p.photo_url ? <img src={p.photo_url} alt={p.name} className="w-full h-full object-cover" /> : <ImageOff className="w-6 h-6 text-slate-300" />}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <h3 className="text-sm font-bold text-slate-900 truncate">{p.name}</h3>
+                    <p className="text-[11px] text-slate-500 mt-0.5">{p.categories?.name} • {p.unit}</p>
+                    <p className="text-[10px] font-bold text-amber-600 mt-1 uppercase tracking-wider">От: {p.store_name}</p>
+                  </div>
+                </div>
+                <div className="flex items-center justify-end gap-2 mt-3 pt-3 border-t border-slate-50">
+                  <button 
+                    onClick={() => handleMakeGlobal(p.id)} 
+                    className="px-3 py-1.5 bg-slate-900 text-white hover:bg-slate-800 rounded-xl transition-colors text-[10px] font-bold"
+                    title="В глобальный"
+                  >
+                    В глобальный
+                  </button>
+                  <button 
+                    onClick={() => setEditItem(p)} 
+                    className="p-2 text-slate-400 hover:text-slate-900 hover:bg-slate-100 rounded-xl transition-colors"
+                    title="Редактировать"
+                  >
+                    <Edit className="w-4 h-4" />
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(p.id)} 
+                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-xl transition-colors"
+                    title="Удалить"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {editItem && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 backdrop-blur-sm p-4">

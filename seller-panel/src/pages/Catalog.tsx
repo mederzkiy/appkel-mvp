@@ -41,10 +41,11 @@ export default function CatalogPage() {
 
       const states: Record<string, ItemState> = {};
       for (const item of data.catalog || []) {
+        if (!item) continue;
         states[item.global_product_id] = {
-          enabled: item.enabled,
-          price: item.custom_price?.toString() ?? '',
-          oldPrice: item.old_price?.toString() ?? '',
+          enabled: Boolean(item.enabled),
+          price: item.custom_price != null ? item.custom_price.toString() : '',
+          oldPrice: item.old_price != null ? item.old_price.toString() : '',
           dirty: false,
           saving: false,
         };
