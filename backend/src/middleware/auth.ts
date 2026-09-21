@@ -18,11 +18,6 @@ export function requireTmaAuth() {
         return;
       }
 
-      if (!storeId) {
-        res.status(400).json({ error: 'Не передан store_id (в заголовке X-Store-Id или query)' });
-        return;
-      }
-
       const initDataRaw = authHeader.slice(4);
       const urlParams = new URLSearchParams(initDataRaw);
       const hash = urlParams.get('hash');
@@ -32,15 +27,10 @@ export function requireTmaAuth() {
         return;
       }
 
-      // Достаём токен бота магазина для сверки HMAC
-      const { data: store, error: storeErr } = await supabaseAdmin
-        .from('stores')
-        .select('telegram_bot_token')
-        .eq('id', storeId)
-        .single();
-
-      if (storeErr || !store?.telegram_bot_token) {
-        res.status(404).json({ error: 'Магазин или токен бота не найден' });
+      // В single-bot архитектуре используем глобальный токен
+      const botToken = process.env.TELEGRAM_BOT_TOKEN;
+      if (!botToken) {
+        res.status(500).json({ error: 'Не настроен TELEGRAM_BOT_TOKEN' });
         return;
       }
 
@@ -54,7 +44,7 @@ export function requireTmaAuth() {
       // Вычисляем HMAC
       const secretKey = crypto
         .createHmac('sha256', 'WebAppData')
-        .update(store.telegram_bot_token)
+        .update(botToken)
         .digest();
 
       const calculatedHash = crypto
@@ -104,18 +94,22 @@ export function requireTmaAuth() {
         return;
       }
 
-      // Привязываем покупателя к конкретному магазину (store_customers)
-      await supabaseAdmin
-        .from('store_customers')
-        .upsert(
-          { store_id: storeId, customer_id: customer.id },
-          { onConflict: 'store_id,customer_id' }
-        );
+      // Привязываем покупателя к конкретному магазину, только если передан storeId
+      if (storeId) {
+        await supabaseAdmin
+          .from('store_customers')
+          .upsert(
+            { store_id: storeId, customer_id: customer.id },
+            { onConflict: 'store_id,customer_id' }
+          );
+      }
 
       // Передаём в запрос
       req.customer = tgUser;
       req.customerId = customer.id;
-      req.storeId = storeId;
+      if (storeId) {
+        req.storeId = storeId;
+      }
 
       next();
     } catch (err) {

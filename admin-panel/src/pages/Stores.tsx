@@ -15,6 +15,12 @@ interface StoreRow {
   telegram_bot_token: string | null;
   bot_online: boolean;
   owner: { email: string } | null;
+  owner_chat_id?: string | null;
+  delivery_radius_km: number;
+  delivery_base_fee: number;
+  delivery_per_km_fee: number;
+  payment_info: any;
+  products_count?: number;
   created_at: string;
 }
 
@@ -92,6 +98,7 @@ export default function StoresPage() {
                 <th className="p-4">Магазин</th>
                 <th className="p-4">Координаты</th>
                 <th className="p-4">Владелец</th>
+                <th className="p-4 text-center">Товары</th>
                 <th className="p-4">Статус</th>
                 <th className="p-4">Подписка</th>
                 <th className="p-4 text-right">Действия</th>
@@ -122,6 +129,9 @@ export default function StoresPage() {
                     </td>
                     <td className="p-4 text-slate-500 font-mono text-[11px]">
                       {store.owner?.email ?? '—'}
+                    </td>
+                    <td className="p-4 text-center text-slate-700 font-bold">
+                      {store.products_count ?? 0}
                     </td>
                     <td className="p-4">
                       <span
@@ -267,6 +277,10 @@ function EditStoreModal({ store, onClose, onSaved }: { store: StoreRow; onClose:
   const [status, setStatus] = useState(store.status);
   const [latitude, setLatitude] = useState(store.latitude?.toString() || '');
   const [longitude, setLongitude] = useState(store.longitude?.toString() || '');
+  const [radius, setRadius] = useState(store.delivery_radius_km?.toString() || '1');
+  const [baseFee, setBaseFee] = useState(store.delivery_base_fee?.toString() || '0');
+  const [perKmFee, setPerKmFee] = useState(store.delivery_per_km_fee?.toString() || '0');
+  const [mbankPhone, setMbankPhone] = useState(store.payment_info?.mbank_phone || '');
   const [expiresAt, setExpiresAt] = useState(store.subscription_expires_at ? store.subscription_expires_at.slice(0, 10) : '');
   const [saving, setSaving] = useState(false);
   const addToast = useUIStore((s: any) => s.addToast);
@@ -275,7 +289,14 @@ function EditStoreModal({ store, onClose, onSaved }: { store: StoreRow; onClose:
     setSaving(true);
     try {
       await apiPatch(`/api/admin/stores/${store.id}`, {
-        status, latitude: latitude ? parseFloat(latitude) : null, longitude: longitude ? parseFloat(longitude) : null, subscription_expires_at: expiresAt || null,
+        status, 
+        latitude: latitude ? parseFloat(latitude) : null, 
+        longitude: longitude ? parseFloat(longitude) : null, 
+        subscription_expires_at: expiresAt || null,
+        delivery_radius_km: radius ? parseFloat(radius) : 1,
+        delivery_base_fee: baseFee ? parseFloat(baseFee) : 0,
+        delivery_per_km_fee: perKmFee ? parseFloat(perKmFee) : 0,
+        payment_info: { ...store.payment_info, mbank_phone: mbankPhone }
       });
       addToast(`Магазин обновлён`, 'success');
       onSaved();
@@ -310,6 +331,20 @@ function EditStoreModal({ store, onClose, onSaved }: { store: StoreRow; onClose:
         </div>
 
         <div>
+          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Доставка (Радиус, База, За км)</label>
+          <div className="grid grid-cols-3 gap-2">
+            <input type="number" step="0.1" value={radius} onChange={(e) => setRadius(e.target.value)} placeholder="Радиус (км)" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" />
+            <input type="number" step="1" value={baseFee} onChange={(e) => setBaseFee(e.target.value)} placeholder="База (сом)" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" />
+            <input type="number" step="1" value={perKmFee} onChange={(e) => setPerKmFee(e.target.value)} placeholder="За км (сом)" className="w-full px-3 py-2.5 bg-slate-50 border border-slate-200 rounded-xl text-xs" />
+          </div>
+        </div>
+
+        <div>
+          <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Телефон MBank</label>
+          <input type="text" value={mbankPhone} onChange={(e) => setMbankPhone(e.target.value)} placeholder="+996..." className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs" />
+        </div>
+
+        <div>
           <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Подписка до</label>
           <input type="date" value={expiresAt} onChange={(e) => setExpiresAt(e.target.value)} className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-200 rounded-2xl text-xs" />
         </div>
@@ -325,28 +360,42 @@ function EditStoreModal({ store, onClose, onSaved }: { store: StoreRow; onClose:
 function StoreQrModal({ store, onClose }: { store: StoreRow; onClose: () => void }) {
   const qrRef = useRef<HTMLDivElement>(null);
   const botUsername = 'appkelbot';
-  const directLink = `https://t.me/${botUsername}?start=setup_${store.id}`;
-  const qrApiUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(directLink)}`;
+  const sellerLink = `https://t.me/${botUsername}?start=setup_${store.id}`;
+  const buyerLink = `https://t.me/${botUsername}?start=store_${store.id}`;
+  
+  const sellerQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(sellerLink)}`;
+  const buyerQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(buyerLink)}`;
+
+  const [activeTab, setActiveTab] = useState<'buyer' | 'seller'>('buyer');
 
   const handlePrint = () => window.print();
+
+  const currentLink = activeTab === 'buyer' ? buyerLink : sellerLink;
+  const currentQr = activeTab === 'buyer' ? buyerQrUrl : sellerQrUrl;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={onClose}>
       <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center space-y-4" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between">
-          <h2 className="text-base font-black text-slate-900">QR-код продавца</h2>
+          <h2 className="text-base font-black text-slate-900">QR-коды магазина</h2>
           <button onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-400" /></button>
         </div>
+        
+        <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+          <button onClick={() => setActiveTab('buyer')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${activeTab === 'buyer' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Для клиентов</button>
+          <button onClick={() => setActiveTab('seller')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${activeTab === 'seller' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Для продавца</button>
+        </div>
+
         <div ref={qrRef} className="p-4 bg-slate-50 border border-slate-200 rounded-3xl inline-block">
-          <img src={qrApiUrl} alt="QR Code" className="w-48 h-48 mx-auto rounded-xl shadow-sm" />
+          <img src={currentQr} alt="QR Code" className="w-48 h-48 mx-auto rounded-xl shadow-sm" />
           <p className="mt-3 text-xs font-black text-slate-900">{store.name}</p>
-          <p className="text-[10px] text-slate-400">Сканировать для привязки к Telegram</p>
+          <p className="text-[10px] text-slate-400">{activeTab === 'buyer' ? 'Отсканируйте для входа в магазин' : 'Сканировать для привязки магазина'}</p>
         </div>
         <div className="text-[11px] font-mono bg-slate-100 p-2.5 rounded-xl text-slate-600 break-all select-all border border-slate-200">
-          {directLink}
+          {currentLink}
         </div>
         <div className="flex gap-2">
-          <a href={qrApiUrl} download={`qr_${store.name}.png`} target="_blank" rel="noreferrer" className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+          <a href={currentQr} download={`qr_${activeTab}_${store.name}.png`} target="_blank" rel="noreferrer" className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
             <Download className="w-4 h-4" /> Скачать
           </a>
           <button onClick={handlePrint} className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">

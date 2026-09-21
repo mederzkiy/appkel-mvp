@@ -40,7 +40,7 @@ export default function SettingsPage() {
         const s = data.store;
         setName(s.name || '');
         setAddress(s.address || '');
-        setRadiusKm(s.delivery_radius_km?.toString() || '5');
+        setRadiusKm(s.delivery_radius_km?.toString() || '1');
         setBaseFee(s.delivery_base_fee?.toString() || '0');
         setPerKmFee(s.delivery_per_km_fee?.toString() || '0');
         setFreeThreshold(s.free_delivery_threshold?.toString() || '0');
@@ -93,7 +93,7 @@ export default function SettingsPage() {
       await apiPut('/api/seller/store', {
         name: name.trim(),
         address: address.trim(),
-        delivery_radius_km: parseFloat(radiusKm) || 5,
+        delivery_radius_km: parseFloat(radiusKm) || 1,
         delivery_base_fee: parseFloat(baseFee) || 0,
         delivery_per_km_fee: parseFloat(perKmFee) || 0,
         free_delivery_threshold: parseFloat(freeThreshold) || 0,

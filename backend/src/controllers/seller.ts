@@ -143,7 +143,10 @@ export async function getSellerCatalog(req: SellerRequest, res: Response): Promi
       return { global_product_id: gp.id, name: gp.name, photo_url: gp.photo_url, barcode: gp.barcode, category: gp.categories, store_product_id: sp?.id || null, enabled: Boolean(sp?.is_active), custom_price: sp?.custom_price !== undefined ? Number(sp.custom_price) : null, old_price: sp?.old_price !== null ? Number(sp.old_price) : null };
     });
     res.json({ catalog });
-  } catch (err) { res.status(500).json({ error: 'Ошибка каталога' }); }
+  } catch (err: any) { 
+    console.error('getSellerCatalog error:', err);
+    res.status(500).json({ error: err.message || 'Ошибка каталога' }); 
+  }
 }
 
 export async function toggleSellerCatalogItem(req: SellerRequest, res: Response): Promise<void> {
@@ -164,7 +167,24 @@ export async function createCustomProduct(req: SellerRequest, res: Response): Pr
 
     const finalPhotoUrl = await resolvePhotoUrl(base64_image, photo_url, 'products');
 
-    const { data: gp } = await supabaseAdmin.from('global_products').insert({ name: name.trim(), category_id, photo_url: finalPhotoUrl, unit: 'шт' }).select('id').single();
+    let finalCategoryId = category_id;
+    if (!finalCategoryId) {
+      const { data: existingCat } = await supabaseAdmin.from('categories').select('id').eq('name', 'Разное').maybeSingle();
+      if (existingCat) {
+        finalCategoryId = existingCat.id;
+      } else {
+        const { data: newCat } = await supabaseAdmin.from('categories').insert({ name: 'Разное', sort_order: 999 }).select('id').single();
+        if (newCat) finalCategoryId = newCat.id;
+      }
+    }
+
+    const { data: gp, error: insertError } = await supabaseAdmin.from('global_products').insert({ name: name.trim(), category_id: finalCategoryId, photo_url: finalPhotoUrl, unit: 'шт' }).select('id').single();
+    
+    if (insertError) {
+      console.error('Error creating custom product in global_products:', insertError);
+      return void res.status(400).json({ error: 'Ошибка БД: ' + insertError.message });
+    }
+
     await supabaseAdmin.from('store_products').insert({ store_id: store.id, global_product_id: gp!.id, custom_price: price || 0, is_active: true });
     res.status(201).json({ success: true });
   } catch (err) { res.status(500).json({ error: 'Ошибка создания кастомного товара' }); }

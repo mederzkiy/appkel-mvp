@@ -337,7 +337,7 @@ function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon
 
 export async function getNearbyStores(req: any, res: any) {
   try {
-    const telegramId = req.user?.id?.toString();
+    const telegramId = req.customer?.id?.toString();
 
     if (!telegramId) {
       return res.status(401).json({ error: 'Не найден Telegram ID' });

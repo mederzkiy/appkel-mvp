@@ -24,12 +24,19 @@ export async function getPlatformMetrics(req: AdminRequest, res: Response): Prom
 
 export async function getStoresList(req: AdminRequest, res: Response): Promise<void> {
   try {
-    const { data: stores, error } = await supabaseAdmin.from('stores').select('*').order('created_at', { ascending: false });
+    const { data: stores, error } = await supabaseAdmin.from('stores').select('*, store_products(id)').order('created_at', { ascending: false });
     if (error) return void res.status(500).json({ error: error.message });
     const { data: { users } } = await supabaseAdmin.auth.admin.listUsers();
     const userEmailMap = new Map<string, string>();
     (users || []).forEach((u) => { if (u.email) userEmailMap.set(u.id, u.email); });
-    const enriched = (stores || []).map((store) => ({ ...store, bot_online: botManager.isBotOnline(store.id), owner: { email: userEmailMap.get(store.owner_id) || null } }));
+    const enriched = (stores || []).map((store) => ({ 
+      ...store, 
+      bot_online: botManager.isBotOnline(store.id), 
+      owner: { email: userEmailMap.get(store.owner_id) || null },
+      products_count: store.store_products?.length || 0 
+    }));
+    // Remove the large array from the response
+    enriched.forEach(s => delete s.store_products);
     res.json({ stores: enriched });
   } catch (err) { res.status(500).json({ error: 'Ошибка загрузки магазинов' }); }
 }
@@ -37,10 +44,14 @@ export async function getStoresList(req: AdminRequest, res: Response): Promise<v
 export async function updateStoreByAdmin(req: AdminRequest, res: Response): Promise<void> {
   try {
     const { id } = req.params;
-    const { status, subscription_expires_at, latitude, longitude } = req.body;
+    const { status, subscription_expires_at, latitude, longitude, delivery_radius_km, delivery_base_fee, delivery_per_km_fee, payment_info } = req.body;
     const updatePayload: any = { status, subscription_expires_at: subscription_expires_at || null };
     if (latitude !== undefined) updatePayload.latitude = latitude;
     if (longitude !== undefined) updatePayload.longitude = longitude;
+    if (delivery_radius_km !== undefined) updatePayload.delivery_radius_km = delivery_radius_km;
+    if (delivery_base_fee !== undefined) updatePayload.delivery_base_fee = delivery_base_fee;
+    if (delivery_per_km_fee !== undefined) updatePayload.delivery_per_km_fee = delivery_per_km_fee;
+    if (payment_info !== undefined) updatePayload.payment_info = payment_info;
     const { data: updated, error } = await supabaseAdmin.from('stores').update(updatePayload).eq('id', id).select('*').single();
     if (error || !updated) return void res.status(400).json({ error: 'Ошибка обновления магазина' });
     if (updated.telegram_bot_token) {
@@ -56,7 +67,10 @@ export async function getGlobalProducts(req: AdminRequest, res: Response): Promi
     const { data: products, error } = await supabaseAdmin.from('global_products').select(`id, name, barcode, photo_url, unit, category_id, categories(id, name)`).order('name');
     if (error) return void res.status(500).json({ error: error.message });
     res.json({ products: products || [] });
-  } catch (err) { res.status(500).json({ error: 'Ошибка каталога' }); }
+  } catch (err: any) { 
+    console.error('getGlobalProducts error:', err);
+    res.status(500).json({ error: err.message || 'Ошибка каталога' }); 
+  }
 }
 
 export async function createGlobalProduct(req: AdminRequest, res: Response): Promise<void> {
@@ -121,7 +135,8 @@ export async function createStore(req: AdminRequest, res: Response): Promise<voi
     const { data: store, error } = await supabaseAdmin.from('stores').insert({
       name: name.trim(),
       owner_id: owner_id || null,
-      status: 'active'
+      status: 'active',
+      delivery_radius_km: 1
     }).select('*').single();
 
     if (error) return void res.status(400).json({ error: error.message });

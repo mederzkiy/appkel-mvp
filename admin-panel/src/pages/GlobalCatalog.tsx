@@ -12,6 +12,7 @@ interface GlobalProduct {
   id: string;
   name: string;
   photo_url: string | null;
+  base64_image?: string;
   unit: string;
   category_id: string;
   categories?: Category;
@@ -63,6 +64,7 @@ export default function GlobalCatalogPage() {
           name: editItem.name,
           category_id: editItem.category_id,
           photo_url: editItem.photo_url,
+          base64_image: editItem.base64_image,
           unit: editItem.unit
         });
         addToast('Товар успешно обновлен', 'success');
@@ -138,17 +140,38 @@ export default function GlobalCatalogPage() {
             </div>
 
             <form onSubmit={handleSave} className="space-y-4">
-              <div className="flex items-center gap-4">
-                <div className="w-16 h-16 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
-                  {editItem.photo_url ? (
-                    <img src={editItem.photo_url} alt="preview" className="w-full h-full object-cover" />
-                  ) : (
-                    <ImageOff className="w-6 h-6 text-slate-300" />
-                  )}
+              <div className="flex flex-col gap-2">
+                <div className="flex items-center gap-4">
+                  <div className="w-16 h-16 rounded-2xl border border-slate-200 bg-slate-50 flex items-center justify-center overflow-hidden shrink-0">
+                    {editItem.photo_url ? (
+                      <img src={editItem.photo_url} alt="preview" className="w-full h-full object-cover" />
+                    ) : (
+                      <ImageOff className="w-6 h-6 text-slate-300" />
+                    )}
+                  </div>
+                  <div className="flex-1">
+                    <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Фото товара (Загрузить)</label>
+                    <input 
+                      type="file" 
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (!file) return;
+                        const reader = new FileReader();
+                        reader.onload = (ev) => {
+                          if (ev.target?.result) {
+                            setEditItem({...editItem, base64_image: ev.target.result as string, photo_url: ev.target.result as string});
+                          }
+                        };
+                        reader.readAsDataURL(file);
+                      }}
+                      className="w-full p-2 bg-slate-50 rounded-xl text-xs border border-slate-200 outline-none file:mr-4 file:py-1 file:px-3 file:rounded-full file:border-0 file:text-xs file:font-semibold file:bg-slate-900 file:text-white hover:file:bg-slate-800" 
+                    />
+                  </div>
                 </div>
-                <div className="flex-1">
-                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Ссылка на фото</label>
-                  <input type="url" placeholder="https://..." value={editItem.photo_url || ''} onChange={e => setEditItem({...editItem, photo_url: e.target.value})} className="w-full p-2.5 bg-slate-50 rounded-xl text-xs border border-slate-200 outline-none focus:border-slate-400" />
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1">Или вставьте ссылку на фото</label>
+                  <input type="text" placeholder="https://..." value={editItem.photo_url?.startsWith('data:') ? '' : editItem.photo_url || ''} onChange={e => setEditItem({...editItem, photo_url: e.target.value, base64_image: undefined})} className="w-full p-2.5 bg-slate-50 rounded-xl text-xs border border-slate-200 outline-none focus:border-slate-400" />
                 </div>
               </div>
 

@@ -23,6 +23,12 @@ export default function App() {
 
     const checkStore = async () => {
       try {
+        const initData = window.Telegram?.WebApp?.initData;
+        if (!initData) {
+          setState('no_store');
+          setErrorMsg('Пожалуйста, откройте панель продавца внутри Telegram, перейдя по кнопке из бота.');
+          return;
+        }
         await apiGet('/api/seller/store');
         setState('ready');
       } catch (err: any) {
