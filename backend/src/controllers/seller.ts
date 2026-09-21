@@ -34,7 +34,12 @@ export async function uploadStoreQrCode(req: SellerRequest, res: Response): Prom
     const publicUrl = await uploadBase64Image(base64_image, `store_${store.id}`);
     if (!publicUrl) return void res.status(400).json({ error: 'Неверный формат' });
 
-    await supabaseAdmin.from('stores').update({ payment_info: { ...(store.payment_info || {}), qr_code_url: publicUrl } }).eq('id', store.id);
+    let pInfo = store.payment_info || {};
+    if (typeof pInfo === 'string') {
+      try { pInfo = JSON.parse(pInfo); } catch (e) { pInfo = {}; }
+    }
+
+    await supabaseAdmin.from('stores').update({ payment_info: { ...pInfo, qr_code_url: publicUrl } }).eq('id', store.id);
     res.json({ qr_code_url: publicUrl });
   } catch (err: any) { res.status(500).json({ error: err.message }); }
 }
@@ -134,13 +139,30 @@ export async function updateOrderStatus(req: SellerRequest, res: Response): Prom
 export async function getSellerCatalog(req: SellerRequest, res: Response): Promise<void> {
   try {
     const store = req.store!;
-    const { data: globalProducts } = await supabaseAdmin.from('global_products').select(`*, categories(id, name)`).order('name');
+    
+    // Fetch global products and categories separately to avoid foreign key ambiguity errors
+    const { data: globalProducts } = await supabaseAdmin.from('global_products').select('*').order('name');
+    const { data: categories } = await supabaseAdmin.from('categories').select('*');
+    const catMap = new Map<string, any>();
+    (categories || []).forEach(c => catMap.set(c.id, c));
+    
     const { data: storeProducts } = await supabaseAdmin.from('store_products').select('*').eq('store_id', store.id);
     const storeProdMap = new Map<string, any>();
     (storeProducts || []).forEach((sp) => storeProdMap.set(sp.global_product_id, sp));
+    
     const catalog = (globalProducts || []).map((gp: any) => {
       const sp = storeProdMap.get(gp.id);
-      return { global_product_id: gp.id, name: gp.name, photo_url: gp.photo_url, barcode: gp.barcode, category: gp.categories, store_product_id: sp?.id || null, enabled: Boolean(sp?.is_active), custom_price: sp?.custom_price !== undefined ? Number(sp.custom_price) : null, old_price: sp?.old_price !== null ? Number(sp.old_price) : null };
+      return {
+        global_product_id: gp.id,
+        name: gp.name,
+        photo_url: gp.photo_url,
+        barcode: gp.barcode,
+        category: gp.category_id ? catMap.get(gp.category_id) : { name: 'Разное' },
+        store_product_id: sp?.id || null,
+        enabled: Boolean(sp?.is_active),
+        custom_price: sp?.custom_price != null ? Number(sp.custom_price) : null,
+        old_price: sp?.old_price != null ? Number(sp.old_price) : null
+      };
     });
     res.json({ catalog });
   } catch (err: any) { 
@@ -190,14 +212,40 @@ export async function createCustomProduct(req: SellerRequest, res: Response): Pr
   } catch (err) { res.status(500).json({ error: 'Ошибка создания кастомного товара' }); }
 }
 
+function getDistanceFromLatLonInKm(lat1: number, lon1: number, lat2: number, lon2: number) {
+  const R = 6371;
+  const dLat = (lat2 - lat1) * (Math.PI / 180);
+  const dLon = (lon2 - lon1) * (Math.PI / 180);
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos(lat1 * (Math.PI / 180)) * Math.cos(lat2 * (Math.PI / 180)) *
+    Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
 export async function sendPushCampaign(req: SellerRequest, res: Response): Promise<void> {
   try {
     const store = req.store!;
     const { message } = req.body;
     if (!message || message.trim().length > 150) return void res.status(400).json({ error: 'Ошибка лимита' });
-    const { data: storeOrders } = await supabaseAdmin.from('orders').select('customers(telegram_id)').eq('store_id', store.id);
-    const tgIds = Array.from(new Set((storeOrders || []).map((o: any) => o.customers?.telegram_id).filter(Boolean).map(Number)));
-    if (tgIds.length === 0) return void res.status(400).json({ error: 'Нет клиентов' });
+
+    const { data: buyers } = await supabaseAdmin.from('buyers').select('telegram_id, latitude, longitude');
+    const storeLat = store.latitude;
+    const storeLon = store.longitude;
+    const radius = store.delivery_radius_km || 1;
+
+    let tgIds: number[] = [];
+
+    if (storeLat && storeLon && buyers) {
+      tgIds = buyers.filter((b: any) => {
+        if (!b.latitude || !b.longitude) return false;
+        const dist = getDistanceFromLatLonInKm(storeLat, storeLon, b.latitude, b.longitude);
+        return dist <= radius;
+      }).map((b: any) => Number(b.telegram_id));
+    }
+
+    if (tgIds.length === 0) return void res.status(400).json({ error: 'Нет пользователей в радиусе доставки' });
     const result = await botManager.broadcast(store.id, tgIds, message.trim());
     res.json({ message: 'Ок', sent: result.sent, failed: result.failed });
   } catch (err) { res.status(500).json({ error: 'Ошибка' }); }

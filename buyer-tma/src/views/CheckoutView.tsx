@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Truck, Store, MapPin, Phone, MessageSquare, Loader2, QrCode, Banknote, Sparkles } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { Truck, Store, MapPin, Phone, MessageSquare, Loader2, QrCode, Banknote, Sparkles, Clock } from 'lucide-react';
 import { api } from '../api/client';
 import { useCartStore } from '../store/cart';
 import { useAppStore } from '../store/app';
@@ -20,15 +20,25 @@ export default function CheckoutView() {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
-  const [distanceKm, setDistanceKm] = useState(1);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Восстановление данных
+  useEffect(() => {
+    const savedAddress = localStorage.getItem('appkel_delivery_address');
+    const savedPhone = localStorage.getItem('appkel_phone');
+    const savedNotes = localStorage.getItem('appkel_notes');
+    if (savedAddress) setAddress(savedAddress);
+    if (savedPhone) setPhone(savedPhone);
+    if (savedNotes) setNotes(savedNotes);
+  }, []);
 
   // Тарифы доставки
   const baseFee = Number(storeInfo?.delivery_base_fee || 0);
   const perKmFee = Number(storeInfo?.delivery_per_km_fee || 0);
-  const maxRadius = Number(storeInfo?.delivery_radius_km || 5);
   const freeThreshold = Number(storeInfo?.free_delivery_threshold || 0);
+  const distanceKm = storeInfo?.distance_km || 1;
+  const estimatedTimeMin = storeInfo?.estimated_time_min || 15;
 
   // Расчет бесплатной доставки
   const isFreeDelivery = deliveryType === 'delivery' && freeThreshold > 0 && subtotal >= freeThreshold;
@@ -43,6 +53,11 @@ export default function CheckoutView() {
 
     setLoading(true);
     setError(null);
+
+    // Сохраняем данные для будущих заказов
+    localStorage.setItem('appkel_delivery_address', address.trim());
+    localStorage.setItem('appkel_phone', phone.trim());
+    localStorage.setItem('appkel_notes', notes.trim());
 
     try {
       const orderPayload: any = {
@@ -129,24 +144,15 @@ export default function CheckoutView() {
               </div>
             </div>
 
-            {/* Слайдер расстояния */}
-            <div className="bg-tg-secondary-bg p-3 rounded-xl">
-              <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-tg-hint">Примерное расстояние:</span>
+            {/* Автоматическое расстояние и время */}
+            <div className="bg-tg-secondary-bg p-3 rounded-xl flex items-center justify-between text-xs">
+              <div className="flex flex-col">
+                <span className="text-tg-hint">Примерное расстояние</span>
                 <span className="font-bold text-tg-text">{distanceKm} км</span>
               </div>
-              <input
-                type="range"
-                min="0.5"
-                max={maxRadius}
-                step="0.5"
-                value={distanceKm}
-                onChange={(e) => setDistanceKm(parseFloat(e.target.value))}
-                className="w-full accent-tg-button cursor-pointer"
-              />
-              <div className="flex justify-between text-[10px] text-tg-hint mt-1">
-                <span>0.5 км</span>
-                <span>Макс. {maxRadius} км</span>
+              <div className="flex items-center gap-1.5 text-tg-text">
+                <Clock className="w-4 h-4 text-tg-button" />
+                <span className="font-bold">~{estimatedTimeMin} мин</span>
               </div>
             </div>
           </>

@@ -15,28 +15,28 @@ export const StoreListView = () => {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="p-4 text-center">Ищем магазины рядом... 📍</div>;
+  if (loading) return <div className="p-4 text-center text-tg-hint">Ищем магазины рядом... 📍</div>;
   if (error) return <div className="p-4 text-center text-red-500">Ошибка: {error}</div>;
 
   return (
-    <div className="p-4 bg-gray-50 min-h-screen">
+    <div className="p-4 bg-tg-bg min-h-screen text-tg-text">
       <h1 className="text-2xl font-bold mb-4">Магазины рядом</h1>
       {stores.length === 0 ? (
-        <p className="text-gray-500">В вашем радиусе пока нет активных магазинов.</p>
+        <p className="text-tg-hint">В вашем радиусе пока нет активных магазинов.</p>
       ) : (
         <div className="flex flex-col gap-3">
           {stores.map(store => (
             <a 
               key={store.id} 
               href={`/?store_id=${store.id}`} 
-              className="bg-white p-4 rounded-xl shadow-sm border border-gray-100 flex justify-between items-center active:scale-95 transition-transform"
+              className="bg-tg-secondary-bg p-4 rounded-xl shadow-sm border border-tg-bg flex justify-between items-center active:scale-95 transition-transform"
             >
               <div>
-                <h2 className="font-semibold text-lg">{store.name}</h2>
-                <p className="text-sm text-gray-500">{store.address}</p>
+                <h2 className="font-semibold text-lg text-tg-text">{store.name}</h2>
+                <p className="text-sm text-tg-hint">{store.address}</p>
               </div>
               {store.distance_km !== undefined && store.distance_km !== null && (
-                <div className="bg-blue-100 text-blue-800 text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap">
+                <div className="bg-tg-button text-tg-button-text text-xs font-bold px-2 py-1 rounded-full whitespace-nowrap">
                   {store.distance_km.toFixed(1)} км
                 </div>
               )}

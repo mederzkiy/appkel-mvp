@@ -64,9 +64,19 @@ export async function updateStoreByAdmin(req: AdminRequest, res: Response): Prom
 
 export async function getGlobalProducts(req: AdminRequest, res: Response): Promise<void> {
   try {
-    const { data: products, error } = await supabaseAdmin.from('global_products').select(`id, name, barcode, photo_url, unit, category_id, categories(id, name)`).order('name');
+    const { data: products, error } = await supabaseAdmin.from('global_products').select(`id, name, barcode, photo_url, unit, category_id`).order('name');
     if (error) return void res.status(500).json({ error: error.message });
-    res.json({ products: products || [] });
+
+    const { data: categories } = await supabaseAdmin.from('categories').select('id, name');
+    const catMap = new Map<string, any>();
+    (categories || []).forEach(c => catMap.set(c.id, c));
+
+    const enriched = (products || []).map(p => ({
+      ...p,
+      categories: p.category_id ? catMap.get(p.category_id) : { id: 'misc', name: 'Разное' }
+    }));
+
+    res.json({ products: enriched });
   } catch (err: any) { 
     console.error('getGlobalProducts error:', err);
     res.status(500).json({ error: err.message || 'Ошибка каталога' }); 

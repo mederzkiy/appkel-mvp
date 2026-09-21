@@ -10,6 +10,8 @@ export interface StoreInfo {
   delivery_base_fee: number;
   delivery_per_km_fee: number;
   free_delivery_threshold?: number; // Порог бесплатной доставки
+  distance_km?: number; // Расстояние от покупателя до магазина
+  estimated_time_min?: number; // Примерное время доставки
   payment_info: {
     mbank_phone?: string;
     qr_code_url?: string;

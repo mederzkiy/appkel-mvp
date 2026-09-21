@@ -13,7 +13,7 @@ export async function getStoreInfo(req: BuyerRequest, res: Response): Promise<vo
 
     const { data: store, error } = await supabaseAdmin
       .from('stores')
-      .select('id, name, address, delivery_radius_km, delivery_base_fee, delivery_per_km_fee, free_delivery_threshold, payment_info')
+      .select('id, name, address, latitude, longitude, delivery_radius_km, delivery_base_fee, delivery_per_km_fee, free_delivery_threshold, payment_info')
       .eq('id', storeId)
       .eq('status', 'active')
       .single();
@@ -23,7 +23,24 @@ export async function getStoreInfo(req: BuyerRequest, res: Response): Promise<vo
       return;
     }
 
-    res.json({ store });
+    let distance_km = 1;
+    let estimated_time_min = 15;
+
+    if (req.customer?.id && store.latitude && store.longitude) {
+      const { data: buyer } = await supabaseAdmin
+        .from('buyers')
+        .select('latitude, longitude')
+        .eq('telegram_id', req.customer.id.toString())
+        .single();
+      
+      if (buyer?.latitude && buyer?.longitude) {
+        distance_km = getDistanceFromLatLonInKm(buyer.latitude, buyer.longitude, store.latitude, store.longitude);
+        distance_km = Math.max(0.5, Math.round(distance_km * 10) / 10); // Округляем до 0.1, минимум 0.5
+        estimated_time_min = Math.round(distance_km * 15); // Примерно 15 минут на 1 км
+      }
+    }
+
+    res.json({ store: { ...store, distance_km, estimated_time_min } });
   } catch (err) {
     console.error('[Buyer getStoreInfo Error]:', err);
     res.status(500).json({ error: 'Ошибка получения данных магазина' });
@@ -37,6 +54,10 @@ export async function getStoreInfo(req: BuyerRequest, res: Response): Promise<vo
 export async function getStoreCatalog(req: BuyerRequest, res: Response): Promise<void> {
   try {
     const storeId = req.params.storeId || req.storeId;
+
+    const { data: categories } = await supabaseAdmin.from('categories').select('*');
+    const catMap = new Map<string, any>();
+    (categories || []).forEach(c => catMap.set(c.id, c));
 
     const { data, error } = await supabaseAdmin
       .from('store_products')
@@ -52,10 +73,7 @@ export async function getStoreCatalog(req: BuyerRequest, res: Response): Promise
           photo_url,
           barcode,
           unit,
-          categories (
-            id,
-            name
-          )
+          category_id
         )
       `)
       .eq('store_id', storeId)
@@ -70,6 +88,7 @@ export async function getStoreCatalog(req: BuyerRequest, res: Response): Promise
       const price = Number(sp.custom_price);
       const oldPrice = sp.old_price ? Number(sp.old_price) : null;
       const isDiscount = Boolean(oldPrice && oldPrice > price);
+      const cat = sp.global_products?.category_id ? catMap.get(sp.global_products.category_id) : null;
 
       return {
         id: sp.id,
@@ -81,8 +100,7 @@ export async function getStoreCatalog(req: BuyerRequest, res: Response): Promise
         photo_url: sp.photo_url || sp.global_products?.photo_url || null,
         barcode: sp.global_products?.barcode || null,
         unit: sp.global_products?.unit || 'шт',
-        category_id: sp.global_products?.categories?.id || 'uncategorized',
-        category_name: sp.global_products?.categories?.name || 'Разное',
+        category: cat ? { id: cat.id, name: cat.name } : { id: 'misc', name: 'Разное' }
       };
     });
 
@@ -108,10 +126,10 @@ export async function createOrder(req: BuyerRequest, res: Response): Promise<voi
       return;
     }
 
-    // 1. Получаем магазин и параметры доставки
+    // Получаем магазин и параметры доставки
     const { data: store, error: storeErr } = await supabaseAdmin
       .from('stores')
-      .select('name, delivery_base_fee, delivery_per_km_fee, delivery_radius_km, free_delivery_threshold')
+      .select('name, latitude, longitude, delivery_base_fee, delivery_per_km_fee, delivery_radius_km, free_delivery_threshold')
       .eq('id', storeId)
       .single();
 
@@ -156,6 +174,20 @@ export async function createOrder(req: BuyerRequest, res: Response): Promise<voi
       };
     });
 
+    // Расчет расстояния
+    let distance = 1;
+    if (req.customer?.id && store.latitude && store.longitude) {
+      const { data: buyer } = await supabaseAdmin
+        .from('buyers')
+        .select('latitude, longitude')
+        .eq('telegram_id', req.customer.id.toString())
+        .single();
+      
+      if (buyer?.latitude && buyer?.longitude) {
+        distance = getDistanceFromLatLonInKm(buyer.latitude, buyer.longitude, store.latitude, store.longitude);
+      }
+    }
+
     // 3. Расчёт доставки с учётом порога бесплатной доставки
     let deliveryFee = 0;
     const freeThreshold = Number(store.free_delivery_threshold || 0);
@@ -164,7 +196,6 @@ export async function createOrder(req: BuyerRequest, res: Response): Promise<voi
       if (freeThreshold > 0 && subtotal >= freeThreshold) {
         deliveryFee = 0;
       } else {
-        const distance = payload.delivery_distance_km || 1;
         deliveryFee = Number(store.delivery_base_fee) + distance * Number(store.delivery_per_km_fee);
       }
     }
@@ -204,7 +235,8 @@ export async function createOrder(req: BuyerRequest, res: Response): Promise<voi
       line_total: item.line_total,
     }));
 
-    await supabaseAdmin.from('order_items').insert(orderItemsRows);
+    const { error: itemsErr } = await supabaseAdmin.from('order_items').insert(orderItemsRows);
+    if (itemsErr) throw itemsErr;
 
     if (payload.phone) {
       await supabaseAdmin
@@ -229,11 +261,12 @@ export async function createOrder(req: BuyerRequest, res: Response): Promise<voi
       (payload.delivery_address ? `📍 Адрес: ${payload.delivery_address}\n` : '') +
       `💳 Оплата: ${paymentLabel}\n` +
       `\n<b>Состав заказа:</b>\n${itemsSummary}\n\n` +
-      `Доставка: ${deliveryFee === 0 && payload.delivery_type === 'delivery' ? 'Бесплатно (Акция)' : `${deliveryFee} сом`}\n` +
-      `💰 <b>Итого: ${totalAmount} сом</b>\n\n` +
+      `Доставка: ${deliveryFee === 0 && payload.delivery_type === 'delivery' ? 'Бесплатно (Акция)' : `${deliveryFee.toFixed(2)} сом`}\n` +
+      `💰 <b>Итого: ${totalAmount.toFixed(2)} сом</b>\n\n` +
       `<i>Откройте панель продавца для обработки заказа.</i>`;
 
-    botManager.notifyStoreOwner(storeId, tgMessage);
+    // Fire and forget
+    botManager.notifyStoreOwner(storeId, tgMessage).catch(console.error);
 
     res.status(201).json({
       order_id: order.id,
@@ -241,9 +274,9 @@ export async function createOrder(req: BuyerRequest, res: Response): Promise<voi
       subtotal,
       delivery_fee: deliveryFee,
     });
-  } catch (err) {
+  } catch (err: any) {
     console.error('[Buyer createOrder Error]:', err);
-    res.status(500).json({ error: 'Ошибка при сохранении заказа' });
+    res.status(500).json({ error: err.message || 'Ошибка при сохранении заказа' });
   }
 }
 

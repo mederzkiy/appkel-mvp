@@ -11,14 +11,11 @@ import {
 
 const router = Router();
 
-// === ПУБЛИЧНЫЕ ЭНДПОИНТЫ ===
-// Инфо и каталог конкретного магазина
-router.get('/stores/:storeId/info', getStoreInfo);
-router.get('/stores/:storeId/catalog', getStoreCatalog);
-
 // === ЗАЩИЩЕННЫЕ ЭНДПОИНТЫ ===
 router.use(requireTmaAuth());
 
+router.get('/stores/:storeId/info', getStoreInfo);
+router.get('/stores/:storeId/catalog', getStoreCatalog);
 router.get('/stores/nearby', getNearbyStores);
 router.post('/orders', createOrder);
 router.post('/orders/:orderId/confirm-payment', confirmPayment);

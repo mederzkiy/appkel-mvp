@@ -1,9 +1,10 @@
 import React, { useEffect, useState } from 'react';
-import { Loader2, Save, Upload, QrCode, CheckCircle2 } from 'lucide-react';
+import { Loader2, Save, Upload, QrCode, CheckCircle2, X, Download, Printer } from 'lucide-react';
 import { apiGet, apiPut, apiPost } from '../api/client';
 import { useUIStore } from '../store/ui';
 
 interface StoreData {
+  id: string;
   name: string;
   address: string;
   delivery_radius_km: number;
@@ -32,6 +33,8 @@ export default function SettingsPage() {
   const [mbankPhone, setMbankPhone] = useState('');
   const [qrCodeUrl, setQrCodeUrl] = useState('');
   const [ownerChatId, setOwnerChatId] = useState('');
+  const [storeId, setStoreId] = useState('');
+  const [showQrModal, setShowQrModal] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -39,6 +42,7 @@ export default function SettingsPage() {
         const data = await apiGet<{ store: StoreData }>('/api/seller/store');
         const s = data.store;
         const pInfo = typeof s.payment_info === 'string' ? JSON.parse(s.payment_info) : (s.payment_info || {});
+        setStoreId(s.id || '');
         setName(s.name || '');
         setAddress(s.address || '');
         setRadiusKm(s.delivery_radius_km?.toString() || '1');
@@ -123,11 +127,21 @@ export default function SettingsPage() {
 
   return (
     <div className="p-4 md:p-6 max-w-3xl mx-auto space-y-6">
-      <div>
-        <h1 className="text-2xl font-black text-slate-900">Настройки магазина</h1>
-        <p className="text-xs text-slate-500 mt-0.5">
-          Конфигурация параметров витрины, условий доставки и платёжных реквизитов
-        </p>
+      <div className="flex items-start justify-between">
+        <div>
+          <h1 className="text-2xl font-black text-slate-900">Настройки магазина</h1>
+          <p className="text-xs text-slate-500 mt-0.5">
+            Конфигурация параметров витрины, условий доставки и платёжных реквизитов
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={() => setShowQrModal(true)}
+          className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold transition-colors"
+        >
+          <QrCode className="w-4 h-4" />
+          <span>QR и ссылки</span>
+        </button>
       </div>
 
       <form onSubmit={handleSave} className="space-y-5">
@@ -335,6 +349,63 @@ export default function SettingsPage() {
           )}
         </button>
       </form>
+      
+      {showQrModal && storeId && (
+        <StoreQrModal
+          storeId={storeId}
+          storeName={name}
+          onClose={() => setShowQrModal(false)}
+        />
+      )}
+    </div>
+  );
+}
+
+function StoreQrModal({ storeId, storeName, onClose }: { storeId: string; storeName: string; onClose: () => void }) {
+  const botUsername = 'appkelbot';
+  const sellerLink = `https://t.me/${botUsername}?start=setup_${storeId}`;
+  const buyerLink = `https://t.me/${botUsername}?start=store_${storeId}`;
+  
+  const sellerQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(sellerLink)}`;
+  const buyerQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${encodeURIComponent(buyerLink)}`;
+
+  const [activeTab, setActiveTab] = useState<'buyer' | 'seller'>('buyer');
+
+  const handlePrint = () => window.print();
+
+  const currentLink = activeTab === 'buyer' ? buyerLink : sellerLink;
+  const currentQr = activeTab === 'buyer' ? buyerQrUrl : sellerQrUrl;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 backdrop-blur-sm p-4" onClick={onClose}>
+      <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-6 text-center space-y-4" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between">
+          <h2 className="text-base font-black text-slate-900">QR-коды магазина</h2>
+          <button type="button" onClick={onClose} className="p-1 hover:bg-slate-100 rounded-lg"><X className="w-5 h-5 text-slate-400" /></button>
+        </div>
+        
+        <div className="flex gap-2 p-1 bg-slate-100 rounded-xl">
+          <button type="button" onClick={() => setActiveTab('buyer')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${activeTab === 'buyer' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Для клиентов</button>
+          <button type="button" onClick={() => setActiveTab('seller')} className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-colors ${activeTab === 'seller' ? 'bg-white text-slate-900 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>Для продавца</button>
+        </div>
+
+        <div className="p-4 bg-slate-50 border border-slate-200 rounded-3xl inline-block">
+          <img src={currentQr} alt="QR Code" className="w-48 h-48 mx-auto rounded-xl shadow-sm" />
+          <p className="mt-3 text-xs font-black text-slate-900">{storeName || 'Магазин'}</p>
+          <p className="text-[10px] text-slate-400">{activeTab === 'buyer' ? 'Отсканируйте для входа в магазин' : 'Сканировать для привязки магазина'}</p>
+        </div>
+        <div className="text-[11px] font-mono bg-slate-100 p-2.5 rounded-xl text-slate-600 break-all select-all border border-slate-200">
+          {currentLink}
+        </div>
+        <div className="flex gap-2">
+          <a href={currentQr} download={`qr_${activeTab}_${storeName}.png`} target="_blank" rel="noreferrer" className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+            <Download className="w-4 h-4" /> Скачать
+          </a>
+          <button type="button" onClick={handlePrint} className="flex-1 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-2xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors">
+            <Printer className="w-4 h-4" /> Печать
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
