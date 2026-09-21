@@ -11,7 +11,9 @@ import {
   createCategory,
   getUsersList,
   createStore,
-  deleteStore
+  deleteStore,
+  deleteGlobalProduct,
+  makeProductGlobal
 } from '../controllers/admin.js';
 
 const router = Router();
@@ -28,6 +30,8 @@ router.post('/stores/:id/delete', deleteStore); // Используем POST д�
 router.get('/global-products', getGlobalProducts);
 router.post('/global-products', createGlobalProduct);
 router.patch('/global-products/:id', updateGlobalProduct);
+router.delete('/global-products/:id', deleteGlobalProduct);
+router.post('/global-products/:id/make-global', makeProductGlobal);
 
 router.get('/categories', getCategoriesList);
 router.post('/categories', createCategory);

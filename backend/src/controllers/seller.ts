@@ -200,7 +200,7 @@ export async function createCustomProduct(req: SellerRequest, res: Response): Pr
       }
     }
 
-    const { data: gp, error: insertError } = await supabaseAdmin.from('global_products').insert({ name: name.trim(), category_id: finalCategoryId, photo_url: finalPhotoUrl, unit: 'шт' }).select('id').single();
+    const { data: gp, error: insertError } = await supabaseAdmin.from('global_products').insert({ name: name.trim(), category_id: finalCategoryId, photo_url: finalPhotoUrl, unit: 'шт', store_id: store.id }).select('id').single();
     
     if (insertError) {
       console.error('Error creating custom product in global_products:', insertError);

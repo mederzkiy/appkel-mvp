@@ -64,16 +64,21 @@ export async function updateStoreByAdmin(req: AdminRequest, res: Response): Prom
 
 export async function getGlobalProducts(req: AdminRequest, res: Response): Promise<void> {
   try {
-    const { data: products, error } = await supabaseAdmin.from('global_products').select(`id, name, barcode, photo_url, unit, category_id`).order('name');
+    const { data: products, error } = await supabaseAdmin.from('global_products').select(`id, name, barcode, photo_url, unit, category_id, store_id`).order('name');
     if (error) return void res.status(500).json({ error: error.message });
 
     const { data: categories } = await supabaseAdmin.from('categories').select('id, name');
     const catMap = new Map<string, any>();
     (categories || []).forEach(c => catMap.set(c.id, c));
 
+    const { data: stores } = await supabaseAdmin.from('stores').select('id, name');
+    const storeMap = new Map<string, string>();
+    (stores || []).forEach(s => storeMap.set(s.id, s.name));
+
     const enriched = (products || []).map(p => ({
       ...p,
-      categories: p.category_id ? catMap.get(p.category_id) : { id: 'misc', name: 'Разное' }
+      categories: p.category_id ? catMap.get(p.category_id) : { id: 'misc', name: 'Разное' },
+      store_name: p.store_id ? storeMap.get(p.store_id) : null
     }));
 
     res.json({ products: enriched });
@@ -161,4 +166,22 @@ export async function deleteStore(req: AdminRequest, res: Response): Promise<voi
     if (error) return void res.status(400).json({ error: error.message });
     res.json({ success: true });
   } catch (err) { res.status(500).json({ error: 'Ошибка удаления магазина' }); }
+}
+
+export async function deleteGlobalProduct(req: AdminRequest, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { error } = await supabaseAdmin.from('global_products').delete().eq('id', id);
+    if (error) return void res.status(400).json({ error: error.message });
+    res.json({ message: 'Товар удален' });
+  } catch (err) { res.status(500).json({ error: 'Ошибка удаления' }); }
+}
+
+export async function makeProductGlobal(req: AdminRequest, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    const { data: updated, error } = await supabaseAdmin.from('global_products').update({ store_id: null }).eq('id', id).select('*').single();
+    if (error) return void res.status(400).json({ error: error.message });
+    res.json({ product: updated, message: 'Товар перенесен в глобальный каталог' });
+  } catch (err) { res.status(500).json({ error: 'Ошибка обновления' }); }
 }

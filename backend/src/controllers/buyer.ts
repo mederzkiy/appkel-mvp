@@ -181,7 +181,7 @@ export async function createOrder(req: BuyerRequest, res: Response): Promise<voi
         .from('buyers')
         .select('latitude, longitude')
         .eq('telegram_id', req.customer.id.toString())
-        .single();
+        .maybeSingle();
       
       if (buyer?.latitude && buyer?.longitude) {
         distance = getDistanceFromLatLonInKm(buyer.latitude, buyer.longitude, store.latitude, store.longitude);
