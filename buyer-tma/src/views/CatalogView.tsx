@@ -156,7 +156,7 @@ export default function CatalogView() {
                     {product.price.toLocaleString('ru-RU')} сом
                   </span>
                   {isDiscount && (
-                    <span className="text-[11px] text-gray-400 line-through">
+                    <span className="text-xs text-gray-500 line-through font-medium">
                       {product.old_price?.toLocaleString('ru-RU')} сом
                     </span>
                   )}

@@ -30,7 +30,7 @@ router.post('/stores/:id/delete', deleteStore); // Используем POST д�
 router.get('/global-products', getGlobalProducts);
 router.post('/global-products', createGlobalProduct);
 router.patch('/global-products/:id', updateGlobalProduct);
-router.delete('/global-products/:id', deleteGlobalProduct);
+router.post('/global-products/:id/delete', deleteGlobalProduct);
 router.post('/global-products/:id/make-global', makeProductGlobal);
 
 router.get('/categories', getCategoriesList);
