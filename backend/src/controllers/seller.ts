@@ -62,7 +62,7 @@ export async function getSellerOrders(req: SellerRequest, res: Response): Promis
   try {
     const store = req.store!;
     const status = req.query.status as string;
-    let query = supabaseAdmin.from('orders').select(`*, customers(first_name, last_name, username, phone), order_items(*)`).eq('store_id', store.id).order('created_at', { ascending: false });
+    let query = supabaseAdmin.from('orders').select(`*, customers(first_name, last_name, username, phone, telegram_id), order_items(*)`).eq('store_id', store.id).order('created_at', { ascending: false });
     if (status === 'active') query = query.in('status', ['new', 'processing', 'ready', 'delivering']);
     else if (status === 'completed') query = query.in('status', ['completed', 'cancelled']);
     else if (status) query = query.eq('status', status);
@@ -112,7 +112,11 @@ export async function updateOrderStatus(req: SellerRequest, res: Response): Prom
       return;
     }
 
-    await supabaseAdmin.from('orders').update({ status: nextStatus }).eq('id', orderId);
+    const updates: any = { status: nextStatus };
+    if (nextStatus === 'processing') updates.accepted_at = new Date().toISOString();
+    if (nextStatus === 'delivering') updates.delivering_at = new Date().toISOString();
+
+    await supabaseAdmin.from('orders').update(updates).eq('id', orderId);
 
     const customerTgId = (order.customers as any)?.telegram_id;
     if (customerTgId) {

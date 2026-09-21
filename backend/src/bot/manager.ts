@@ -9,7 +9,7 @@ import { config } from '../config/env.js';
  */
 interface PendingSetup {
   storeId: string;
-  stage: 'contact_pending' | 'location_pending';
+  stage: 'contact_pending' | 'location_pending' | 'buyer_contact_pending' | 'buyer_location_pending';
   phone?: string;
 }
 
@@ -78,19 +78,44 @@ class BotManager {
           .eq('id', storeId)
           .single();
 
-        const msg = store
-          ? `Добро пожаловать в <b>«${store.name}»</b>!`
-          : 'Магазин найден!';
+        const { data: buyer } = await supabaseAdmin
+          .from('buyers')
+          .select('id')
+          .eq('telegram_id', ctx.from.id.toString())
+          .single();
 
-        const kb = new InlineKeyboard().webApp(
-          '🛍 Открыть магазин',
-          `${config.tma.buyerUrl}?store_id=${storeId}`
-        );
-        await ctx.reply(msg + '\nНажмите кнопку ниже:', {
-          reply_markup: kb,
-          parse_mode: 'HTML',
-        });
-        return;
+        if (buyer) {
+          const msg = store
+            ? `С возвращением в <b>«${store.name}»</b>!`
+            : 'Магазин найден!';
+
+          const kb = new InlineKeyboard().webApp(
+            '🛍 Открыть магазин',
+            `${config.tma.buyerUrl}?store_id=${storeId}`
+          );
+          await ctx.reply(msg + '\nНажмите кнопку ниже:', {
+            reply_markup: kb,
+            parse_mode: 'HTML',
+          });
+          return;
+        } else {
+          // Запоминаем для онбординга
+          pendingSetups.set(ctx.from.id, {
+            storeId,
+            stage: 'buyer_contact_pending',
+          });
+
+          const kb = new Keyboard()
+            .requestContact('📱 Поделиться номером')
+            .resized()
+            .oneTime();
+
+          await ctx.reply(
+            `Добро пожаловать в <b>«${store?.name || 'магазин'}»</b>! 👋\n\nПоделитесь контактом для оформления заказов.`,
+            { reply_markup: kb, parse_mode: 'HTML' }
+          );
+          return;
+        }
       }
 
       // СЦЕНАРИЙ 3: Обычный покупатель (без payload)
@@ -132,6 +157,21 @@ class BotManager {
           `<b>Шаг 2 из 2:</b> Теперь отправьте геолокацию вашего магазина для настройки зоны доставки.`,
           { reply_markup: kb, parse_mode: 'HTML' }
         );
+        return;
+      }
+
+      // --- СЦЕНАРИЙ ПОКУПАТЕЛЯ ПО QR ---
+      if (pending && pending.stage === 'buyer_contact_pending') {
+        pending.phone = contact.phone_number;
+        pending.stage = 'buyer_location_pending';
+        pendingSetups.set(ctx.from.id, pending);
+
+        const kb = new Keyboard()
+          .requestLocation('📍 Отправить локацию')
+          .resized()
+          .oneTime();
+
+        await ctx.reply('✅ Контакт сохранен! Теперь отправьте локацию для доставки.', { reply_markup: kb });
         return;
       }
 
@@ -186,6 +226,30 @@ class BotManager {
           'Нажмите кнопку ниже, чтобы открыть панель управления:',
           { reply_markup: kb, parse_mode: 'HTML' }
         );
+        return;
+      }
+
+      // --- СЦЕНАРИЙ ПОКУПАТЕЛЯ ПО QR ---
+      if (pending && pending.stage === 'buyer_location_pending') {
+        await supabaseAdmin.from('buyers').upsert({
+          telegram_id: ctx.from.id.toString(),
+          phone: pending.phone,
+          latitude: loc.latitude,
+          longitude: loc.longitude,
+          first_name: ctx.from.first_name,
+          username: ctx.from.username,
+        });
+
+        const storeId = pending.storeId;
+        pendingSetups.delete(ctx.from.id);
+
+        const kb = new InlineKeyboard().webApp(
+          '🛍 Открыть магазин',
+          `${config.tma.buyerUrl}?store_id=${storeId}`
+        );
+        await ctx.reply('✅ Регистрация завершена! Нажмите кнопку ниже для входа в магазин:', {
+          reply_markup: kb,
+        });
         return;
       }
 

@@ -45,7 +45,11 @@ interface Order {
     last_name: string | null;
     username: string | null;
     phone: string | null;
+    telegram_id: number | null;
   } | null;
+  change_from: number | null;
+  accepted_at: string | null;
+  delivering_at: string | null;
   items: OrderItem[];
 }
 
@@ -65,7 +69,7 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   cancelled: { label: 'Отменён', color: 'text-red-700', bg: 'bg-red-50 border-red-200' },
 };
 
-const STATUS_ACTIONS: Record<string, { label: string; next: string; icon: any }[]> = {
+const STATUS_ACTIONS_MAP: Record<string, { label: string; next: string; icon: any }[]> = {
   new: [{ label: 'Начать сборку', next: 'processing', icon: Package }],
   processing: [{ label: 'Передать в доставку', next: 'delivering', icon: Truck }],
   delivering: [{ label: 'Завершить заказ', next: 'completed', icon: CheckCircle2 }],
@@ -269,9 +273,24 @@ const OrderCard: React.FC<{
 }> = ({ order, onUpdateStatus }) => {
   const [expanded, setExpanded] = useState(false);
   const [acting, setActing] = useState(false);
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    if (order.status === 'processing' || order.status === 'delivering') {
+      const timer = setInterval(() => setNow(Date.now()), 1000);
+      return () => clearInterval(timer);
+    }
+  }, [order.status]);
 
   const config = STATUS_CONFIG[order.status] ?? STATUS_CONFIG.new;
-  const actions = STATUS_ACTIONS[order.status] ?? [];
+  let actions = STATUS_ACTIONS_MAP[order.status] ?? [];
+  
+  if (order.status === 'processing' && order.delivery_type === 'pickup') {
+    actions = [{ label: 'Собран (Ожидает)', next: 'ready', icon: MapPin }];
+  } else if (order.status === 'ready') {
+    actions = [{ label: 'Завершить заказ', next: 'completed', icon: CheckCircle2 }];
+  }
+
   const shortId = order.id.slice(0, 8).toUpperCase();
   const customerName = order.customer
     ? `${order.customer.first_name}${order.customer.last_name ? ' ' + order.customer.last_name : ''}`
@@ -285,14 +304,34 @@ const OrderCard: React.FC<{
     setActing(false);
   };
 
+  const renderTimer = () => {
+    if (order.status === 'processing' && order.accepted_at) {
+      const elapsed = now - new Date(order.accepted_at).getTime();
+      const left = 10 * 60 * 1000 - elapsed;
+      if (left > 0) {
+        const m = Math.floor(left / 60000);
+        const s = Math.floor((left % 60000) / 1000);
+        return <span className="text-blue-600 ml-2 font-bold animate-pulse">⏳ {m}:{s < 10 ? '0'+s : s}</span>;
+      }
+      return <span className="text-red-500 ml-2 font-bold animate-pulse">⚠️ Задержка</span>;
+    }
+    if (order.status === 'delivering' && order.delivering_at) {
+      const elapsed = now - new Date(order.delivering_at).getTime();
+      const m = Math.floor(elapsed / 60000);
+      return <span className="text-purple-600 ml-2 font-bold">⏱ В пути {m} мин</span>;
+    }
+    return null;
+  };
+
   return (
     <div className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-sm hover:border-slate-300 transition-all">
       <button onClick={() => setExpanded(!expanded)} className="w-full p-4 text-left flex items-start gap-3">
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <span className="font-black text-sm text-slate-900">#{shortId}</span>
-            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${config.bg} ${config.color}`}>
+            <span className={`text-[11px] font-bold px-2.5 py-0.5 rounded-full border flex items-center ${config.bg} ${config.color}`}>
               {config.label}
+              {renderTimer()}
             </span>
 
             <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 flex items-center gap-1">
@@ -309,10 +348,16 @@ const OrderCard: React.FC<{
               {order.delivery_type === 'delivery' ? <Truck className="w-3.5 h-3.5 text-blue-600" /> : <MapPin className="w-3.5 h-3.5 text-amber-600" />}
               {order.delivery_type === 'delivery' ? 'Доставка' : 'Самовывоз'}
             </span>
-            {order.customer?.phone && (
-              <span className="flex items-center gap-1 font-medium">
-                <Phone className="w-3.5 h-3.5 text-slate-400" /> {order.customer.phone}
-              </span>
+            {order.customer && (order.customer.username || order.customer.telegram_id) && (
+              <a
+                href={order.customer.username ? `https://t.me/${order.customer.username}` : `tg://user?id=${order.customer.telegram_id}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 font-medium text-blue-500 hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <Send className="w-3.5 h-3.5" /> Написать клиенту
+              </a>
             )}
             <span className="flex items-center gap-1 text-slate-400 font-medium">
               <Clock className="w-3.5 h-3.5" /> {timeAgo}
@@ -352,6 +397,12 @@ const OrderCard: React.FC<{
           {order.delivery_address && (
             <div className="text-xs text-slate-700 bg-white border border-slate-200 rounded-2xl p-2.5">
               📍 <b>Адрес:</b> {order.delivery_address}
+            </div>
+          )}
+
+          {order.payment_method === 'cash' && order.change_from && (
+            <div className="text-xs text-emerald-800 bg-emerald-50 border border-emerald-200 rounded-2xl p-2.5">
+              💵 <b>Сдача с:</b> {Number(order.change_from).toLocaleString('ru-RU')} сом
             </div>
           )}
 

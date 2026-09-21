@@ -20,6 +20,7 @@ export default function CheckoutView() {
   const [address, setAddress] = useState('');
   const [phone, setPhone] = useState('');
   const [notes, setNotes] = useState('');
+  const [changeFrom, setChangeFrom] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,13 +73,18 @@ export default function CheckoutView() {
         phone: phone.trim() || undefined,
         notes: notes.trim() || undefined,
         payment_method: paymentMethod,
+        change_from: paymentMethod === 'cash' && changeFrom ? Number(changeFrom) : undefined,
       };
 
       const res = await api.createOrder(storeId, orderPayload);
       tg?.HapticFeedback?.notificationOccurred('success');
 
       setActiveOrder(res.order_id, res.total_amount);
-      navigate('payment');
+      if (paymentMethod === 'cash') {
+        navigate('order-status');
+      } else {
+        navigate('payment');
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ошибка при оформлении заказа');
       tg?.HapticFeedback?.notificationOccurred('error');
@@ -204,6 +210,24 @@ export default function CheckoutView() {
               <Banknote className="w-4 h-4" /> Наличными
             </button>
           </div>
+          
+          {paymentMethod === 'cash' && (
+            <div className="mt-3 animate-in fade-in slide-in-from-top-2">
+              <label className="block text-[11px] font-medium text-tg-hint mb-1">
+                Сдача с (если нужна)
+              </label>
+              <div className="relative">
+                <Banknote className="w-4 h-4 text-tg-hint absolute left-3 top-3" />
+                <input
+                  type="number"
+                  value={changeFrom}
+                  onChange={(e) => setChangeFrom(e.target.value)}
+                  placeholder="Например, 1000"
+                  className="w-full bg-tg-secondary-bg text-tg-text pl-9 pr-3 py-2.5 rounded-xl text-xs focus:outline-none"
+                />
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Переключатель Доставка / Самовывоз (перенесен вниз) */}
@@ -275,7 +299,7 @@ export default function CheckoutView() {
               <span>Создание заказа...</span>
             </>
           ) : (
-            <span>Перейти к оплате • {totalAmount.toLocaleString('ru-RU')} сом</span>
+            <span>{paymentMethod === 'cash' ? 'Оформить заказ' : 'Перейти к оплате'} • {totalAmount.toLocaleString('ru-RU')} сом</span>
           )}
         </button>
       </div>

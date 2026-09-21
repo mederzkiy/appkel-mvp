@@ -215,6 +215,7 @@ export async function createOrder(req: BuyerRequest, res: Response): Promise<voi
         total_amount: totalAmount,
         notes: payload.notes || null,
         payment_method: payload.payment_method || 'qr',
+        change_from: payload.change_from,
         status: 'new',
         payment_confirmed: false,
       })

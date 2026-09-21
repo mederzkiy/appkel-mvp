@@ -15,7 +15,7 @@ export default function PaymentView() {
   const [copied, setCopied] = useState(false);
   const [confirming, setConfirming] = useState(false);
 
-  const mbankPhone = storeInfo?.payment_info?.mbank_phone || '0555 000 000';
+  const mbankPhone = storeInfo?.payment_info?.mbank_phone || 'Номер не указан';
   const qrUrl = storeInfo?.payment_info?.qr_code_url;
   const shortId = activeOrderId ? activeOrderId.slice(0, 8).toUpperCase() : '';
 

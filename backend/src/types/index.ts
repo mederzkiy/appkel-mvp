@@ -60,4 +60,5 @@ export interface CreateOrderPayload {
   delivery_distance_km?: number;
   notes?: string;
   phone?: string;
+  change_from?: number;
 }
